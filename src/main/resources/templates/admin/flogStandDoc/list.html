@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.pollix.at/thymeleaf/shiro">
+<head>
+    <th:block th:include="include :: header('编制单位在册底档')"/>
+</head>
+<body class="pear-container">
+<div class="layui-card">
+    <div class="layui-card-body">
+        <form class="layui-form">
+            <div class="layui-form-item">
+                <label class="layui-form-label">字号</label>
+                <div class="layui-input-inline"><input type="text" name="siteNo" class="layui-input"></div>
+                <label class="layui-form-label">全称</label>
+                <div class="layui-input-inline"><input type="text" name="siteName" class="layui-input"></div>
+                <label class="layui-form-label">经营类别</label>
+                <div class="layui-input-inline">
+                    <select name="siteType">
+                        <option value="">全部</option>
+                        <option value="国有林场">国有林场</option>
+                        <option value="集体林场">集体林场</option>
+                        <option value="个人承包山">个人承包山</option>
+                    </select>
+                </div>
+                <label class="layui-form-label">情形</label>
+                <div class="layui-input-inline">
+                    <select name="status">
+                        <option value="">全部</option>
+                        <option value="0">在册</option>
+                        <option value="1">已收回</option>
+                    </select>
+                </div>
+                <button class="pear-btn pear-btn-primary pear-btn-md" lay-submit lay-filter="doc-query">
+                    <i class="layui-icon layui-icon-search"></i> 查询
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<div class="layui-card">
+    <div class="layui-card-body">
+        <table id="doc-table" lay-filter="doc-table"></table>
+    </div>
+</div>
+</body>
+<script type="text/html" id="doc-toolbar">
+    <button shiro:hasPermission="flog:flogStandDoc:add" class="pear-btn pear-btn-primary pear-btn-md" lay-event="add">
+        <i class="layui-icon layui-icon-add-1"></i> 立户
+    </button>
+</script>
+<script type="text/html" id="doc-bar">
+    {{# if(d.status === 0){ }}
+    <button shiro:hasPermission="flog:flogStandDoc:add" class="pear-btn pear-btn-warming pear-btn-sm" lay-event="recall" title="年初收回（不再接新卡，旧卡仍可翻检）">
+        <i class="layui-icon layui-icon-close"></i> 收回
+    </button>
+    {{# } }}
+</script>
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['table', 'form', 'jquery'], function () {
+        let table = layui.table, form = layui.form, $ = layui.jquery;
+        let P = rootPath + '/FlogStandDocController/';
+        table.render({
+            elem: '#doc-table', url: P + 'list', method: 'get', page: true, skin: 'line',
+            toolbar: '#doc-toolbar',
+            cols: [[
+                {title: '字号', field: 'siteNo', width: 110},
+                {title: '全称', field: 'siteName', width: 300},
+                {title: '经营类别', field: 'siteType', width: 120},
+                {title: '管辖林业站(省—市—县)', field: 'roadName', width: 260},
+                {title: '轻度线', field: 'th1Max', width: 90},
+                {title: '中度线', field: 'th2Max', width: 90},
+                {title: '重度线', field: 'th3Max', width: 90},
+                {title: '情形', field: 'status', width: 100, templet: function (d) {
+                    return d.status === 1 ? '<span class="layui-badge">已收回</span>'
+                        : '<span class="layui-badge layui-bg-green">在册</span>';
+                }},
+                {title: '操作', toolbar: '#doc-bar', width: 120}
+            ]]
+        });
+        form.on('submit(doc-query)', function (data) {
+            table.reload('doc-table', {where: data.field, pageNum: 1});
+            return false;
+        });
+        table.on('toolbar(doc-table)', function (o) {
+            if (o.event === 'add') {
+                layer.open({type: 2, title: '编制单位底档立户（字号系统排）', shade: 0.1,
+                    area: ['680px', '600px'], content: P + 'add'});
+            }
+        });
+        table.on('tool(doc-table)', function (o) {
+            if (o.event === 'recall') {
+                layer.confirm('年初收回字号 ' + o.data.siteNo + '？收回后不再接纳新卡，早年挂的卡仍翻得到。',
+                    {icon: 3, title: '收回'}, function (i) {
+                        layer.close(i);
+                        let loading = layer.load();
+                        $.ajax({url: P + 'recall/' + o.data.id, type: 'post', dataType: 'json',
+                            success: function (r) {
+                                layer.close(loading);
+                                if (r.code === 200) { layer.msg(r.msg, {icon: 1, time: 1200}, function () { table.reload('doc-table'); }); }
+                                else { layer.msg(r.msg, {icon: 2}); }
+                            },
+                            error: function () { layer.close(loading); layer.msg('请求失败', {icon: 2}); }});
+                    });
+            }
+        });
+    });
+</script>
+</body>
+</html>

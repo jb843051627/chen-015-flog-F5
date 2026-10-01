@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <th:block th:include="include :: header('清册逐行递入')"/>
+</head>
+<body>
+<form class="layui-form">
+    <div class="mainBox"><div class="main-container">
+        <div class="layui-form-item">
+            <label class="layui-form-label">批次号</label>
+            <div class="layui-input-inline">
+                <input type="text" name="batchNo" autocomplete="off" placeholder="一册一个批次号" class="layui-input">
+            </div>
+            <label class="layui-form-label">底档字号</label>
+            <div class="layui-input-inline">
+                <input type="text" name="siteNo" autocomplete="off" placeholder="一册只许一家，行不许挪册" class="layui-input">
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">小班号</label>
+            <div class="layui-input-inline">
+                <input type="text" name="subcompNo" autocomplete="off" class="layui-input">
+            </div>
+            <label class="layui-form-label">采伐方式</label>
+            <div class="layui-input-inline">
+                <select name="cutMode">
+                    <option value="">请选择</option>
+                    <option value="1">皆伐（主伐）</option>
+                    <option value="2">渐伐（主伐）</option>
+                    <option value="3">择伐（主伐）</option>
+                    <option value="4">抚育采伐</option>
+                    <option value="5">更新采伐</option>
+                    <option value="6">低质低效林改造</option>
+                </select>
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">林种性质</label>
+            <div class="layui-input-inline">
+                <select name="forestKind">
+                    <option value="">请选择</option>
+                    <option value="2">商品林</option>
+                    <option value="1">公益林（只许抚育/更新/改造）</option>
+                </select>
+            </div>
+            <label class="layui-form-label">权属在诉</label>
+            <div class="layui-input-inline">
+                <select name="disputeFlag">
+                    <option value="0">无</option>
+                    <option value="1">有（挂起）</option>
+                </select>
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">申报面积</label>
+            <div class="layui-input-inline">
+                <input type="number" step="0.01" name="area" placeholder="公顷" class="layui-input">
+            </div>
+            <label class="layui-form-label">调查材料</label>
+            <div class="layui-input-inline">
+                <select name="surveyFlag">
+                    <option value="0">未附</option>
+                    <option value="1">已附</option>
+                </select>
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">申报蓄积</label>
+            <div class="layui-input-inline">
+                <input type="number" step="0.01" name="qty" placeholder="立方米" class="layui-input">
+            </div>
+            <label class="layui-form-label">核收蓄积</label>
+            <div class="layui-input-inline">
+                <input type="number" step="0.01" name="recvQty" placeholder="不填按申报数收；不得大过申报" class="layui-input">
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <div class="layui-input-block layui-word-aux">
+                行次进门一刻由系统按顺序钉；公益林走主伐、权属在诉、超省级限额未附调查材料各按代号挂起，只挂这一行；同册重复小班并作头行一行。
+            </div>
+        </div>
+    </div></div>
+    <div class="bottom"><div class="button-container">
+        <button type="submit" class="layui-btn layui-btn-normal layui-btn-sm" lay-submit lay-filter="row-save">
+            <i class="layui-icon layui-icon-ok"></i> 递入这一行
+        </button>
+        <button type="button" class="layui-btn layui-btn-primary layui-btn-sm" id="row-finalize">收口出回执</button>
+        <button type="reset" class="layui-btn layui-btn-primary layui-btn-sm">清空</button>
+    </div></div>
+</form>
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['form', 'jquery', 'layer'], function () {
+        let form = layui.form, $ = layui.jquery, layer = layui.layer;
+        let MODULE_PATH = rootPath + '/FlogDeclareRowController/';
+
+        function num(v) { return v === '' || v == null ? null : Number(v); }
+
+        form.on('submit(row-save)', function (data) {
+            let f = data.field;
+            let body = {
+                batchNo: f.batchNo, siteNo: f.siteNo, subcompNo: f.subcompNo,
+                cutMode: num(f.cutMode), forestKind: num(f.forestKind),
+                disputeFlag: num(f.disputeFlag), area: num(f.area),
+                surveyFlag: num(f.surveyFlag), qty: num(f.qty), recvQty: num(f.recvQty)
+            };
+            let loading = layer.load();
+            $.ajax({url: MODULE_PATH + 'row', type: 'post', contentType: 'application/json',
+                data: JSON.stringify(body), dataType: 'json',
+                success: function (r) {
+                    layer.close(loading);
+                    if (r.code === 200) {
+                        layer.alert(r.msg || '已落', {title: '本行给回'}, function (i) {
+                            layer.close(i);
+                        });
+                    } else { layer.msg(r.msg || '没落上', {icon: 2, time: 3500}); }
+                },
+                error: function () { layer.close(loading); layer.msg('请求失败', {icon: 2}); }});
+            return false;
+        });
+
+        $('#row-finalize').on('click', function () {
+            let batchNo = $('input[name="batchNo"]').val();
+            if (!batchNo) { layer.msg('先填批次号', {icon: 2}); return; }
+            $.post(MODULE_PATH + 'finalize', {batchNo: batchNo}, function (r) {
+                if (r.code === 200) {
+                    let d = r.data;
+                    layer.alert('<div style="line-height:28px">落法：<b>' + d.recvStatusText + '</b><br>' +
+                        '总计 ' + d.totalRows + ' 行<br>收下 ' + d.acceptedRows +
+                        ' 行<br>挂起 ' + d.suspendedRows + ' 行<br><span style="color:#999">' +
+                        d.message + '</span></div>', {title: '回执'});
+                } else { layer.msg(r.msg || '收口失败', {icon: 2, time: 3500}); }
+            }, 'json');
+        });
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <th:block th:include="include :: header('清册往期页')"/>
+</head>
+<body>
+<div style="padding: 14px;">
+    <form class="layui-form" onsubmit="return false;">
+        <div class="layui-form-item">
+            <label class="layui-form-label">批次号</label>
+            <div class="layui-input-inline">
+                <input type="text" id="batchNo" class="layui-input" placeholder="凭批次号把账拉出来">
+            </div>
+            <label class="layui-form-label">底档字号</label>
+            <div class="layui-input-inline">
+                <input type="text" id="siteNo" class="layui-input">
+            </div>
+            <label class="layui-form-label">执行期年度</label>
+            <div class="layui-input-inline">
+                <input type="number" id="periodYear" class="layui-input">
+            </div>
+            <button class="pear-btn pear-btn-md pear-btn-primary" id="q-btn">
+                <i class="layui-icon layui-icon-search"></i> 翻往期账
+            </button>
+        </div>
+    </form>
+    <table id="archived-table" lay-filter="archived-table"></table>
+</div>
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['table', 'jquery', 'layer'], function () {
+        let table = layui.table, $ = layui.jquery, layer = layui.layer;
+        let MODULE_PATH = rootPath + '/FlogDeclareRowController/';
+        let MODE = {1: '皆伐', 2: '渐伐', 3: '择伐', 4: '抚育采伐', 5: '更新采伐', 6: '低质低效林改造'};
+
+        let cols = [[
+            {title: '批次号', field: 'batchNo', width: 150},
+            {title: '行次', field: 'rowNo', width: 70},
+            {title: '底档字号', field: 'siteNo', width: 90},
+            {title: '小班号', field: 'subcompNo', width: 100},
+            {title: '采伐方式', field: 'cutMode', width: 110, templet: function (d) { return MODE[d.cutMode] || ''; }},
+            {title: '执行期', field: 'periodYear', width: 90},
+            {title: '申报蓄积', field: 'qty', width: 100},
+            {title: '核收蓄积', field: 'recvQty', width: 100},
+            {title: '并作', field: 'mergeOfRowNo', width: 100, templet: function (d) {
+                return d.mergeOfRowNo != null ? '并第' + d.mergeOfRowNo + '行' : '';
+            }}
+        ]];
+
+        function load(data) {
+            table.render({elem: '#archived-table', cols: cols, data: data || [], skin: 'line',
+                text: {none: '往期页没有对得上的行'}});
+        }
+
+        $('#q-btn').on('click', function () {
+            $.get(MODULE_PATH + 'archived', {
+                batchNo: $('#batchNo').val(), siteNo: $('#siteNo').val(), periodYear: $('#periodYear').val()
+            }, function (r) {
+                if (r.code === 200) { load(r.data); } else { layer.msg(r.msg || '翻不出来', {icon: 2}); }
+            }, 'json');
+        });
+    });
+</script>
+</body>
+</html>

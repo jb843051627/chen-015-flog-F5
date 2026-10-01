@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.pollix.at/thymeleaf/shiro">
+<head>
+    <th:block th:include="include :: header('伐区调查设计')"/>
+</head>
+<body class="pear-container">
+<div class="layui-card">
+    <div class="layui-card-body">
+        <form class="layui-form">
+            <div class="layui-form-item">
+                <label class="layui-form-label">底档字号</label>
+                <div class="layui-input-inline"><input type="text" name="siteNo" class="layui-input"></div>
+                <label class="layui-form-label">小班号</label>
+                <div class="layui-input-inline"><input type="text" name="subcompNo" class="layui-input"></div>
+                <label class="layui-form-label">林地类别</label>
+                <div class="layui-input-inline">
+                    <select name="applyScope">
+                        <option value="">全部</option>
+                        <option value="2">商品林</option>
+                        <option value="11">公益林·抚育</option>
+                        <option value="12">公益林·更新</option>
+                        <option value="13">公益林·低质低效林改造</option>
+                    </select>
+                </div>
+                <button class="pear-btn pear-btn-primary pear-btn-md" lay-submit lay-filter="sd-query">
+                    <i class="layui-icon layui-icon-search"></i> 查询
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<div class="layui-card">
+    <div class="layui-card-body">
+        <table id="sd-table" lay-filter="sd-table"></table>
+    </div>
+</div>
+</body>
+<script type="text/html" id="sd-toolbar">
+    <button shiro:hasPermission="flog:flogSurveyDesign:add" class="pear-btn pear-btn-primary pear-btn-md" lay-event="add">
+        <i class="layui-icon layui-icon-add-1"></i> 新调查设计
+    </button>
+</script>
+<script type="text/html" id="sd-bar">
+    <button shiro:hasPermission="flog:flogSurveyDesign:view" class="pear-btn pear-btn-sm" lay-event="results">各轮结论</button>
+    <button shiro:hasPermission="flog:flogSurveyDesign:add" class="pear-btn pear-btn-warming pear-btn-sm" lay-event="recheck">整改复验</button>
+</script>
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['table', 'form', 'jquery'], function () {
+        let table = layui.table, form = layui.form, $ = layui.jquery;
+        let P = rootPath + '/FlogSurveyDesignController/';
+        table.render({
+            elem: '#sd-table', url: P + 'list', method: 'get', page: true, skin: 'line',
+            toolbar: '#sd-toolbar',
+            cols: [[
+                {title: '单号', field: 'designNo', width: 190},
+                {title: '字号', field: 'siteNo', width: 90},
+                {title: '小班', field: 'subcompNo', width: 110},
+                {title: '伐区名号', field: 'cutBlockNo', width: 140},
+                {title: '林地类别', field: 'applyScope', width: 160, templet: function (d) {
+                    return {2: '商品林', 11: '公益林·抚育', 12: '公益林·更新', 13: '公益林·低改'}[d.applyScope] || d.applyScope;
+                }},
+                {title: '面积(公顷)', field: 'area', width: 100},
+                {title: '出材率', field: 'yieldRate', width: 80},
+                {title: '调查员', field: 'surveyBy', width: 90},
+                {title: '调查设计日', field: 'designDate', width: 170}
+            ]]
+        });
+        form.on('submit(sd-query)', function (data) {
+            table.reload('sd-table', {where: data.field, pageNum: 1});
+            return false;
+        });
+        table.on('toolbar(sd-table)', function (o) {
+            if (o.event === 'add') {
+                layer.open({type: 2, title: '伐区调查设计（检尺→定档一处算清）', shade: 0.1,
+                    area: ['900px', '680px'], content: P + 'submitView'});
+            }
+        });
+        table.on('tool(sd-table)', function (o) {
+            if (o.event === 'results') {
+                $.get(P + 'results', {designId: o.data.id}, function (r) {
+                    let list = r.data || [];
+                    let rows = list.map(function (x) {
+                        let grade = x.basisMissing === 1
+                            ? '<span class="layui-badge">无线可依</span>'
+                            : ['', '轻', '中', '重'][x.gradeLevel] + '度';
+                        return '<tr><td>第' + x.roundNo + (x.recheckFlag === 1 ? '轮(复验)' : '轮(首评)') + '</td>'
+                            + '<td>' + (x.totalVolume == null ? '—' : x.totalVolume) + '</td>'
+                            + '<td>' + (x.yieldPerHa == null ? '—' : x.yieldPerHa) + '</td>'
+                            + '<td>' + grade + '</td>'
+                            + '<td>' + (x.ruleCode || '—') + '</td>'
+                            + '<td>' + (x.ruleEffStart || '—') + '</td>'
+                            + '<td>' + (x.volTableCode || '—') + '</td></tr>';
+                    }).join('');
+                    layer.open({type: 1, title: '单号 ' + o.data.designNo + ' 各轮定档结论（钉死不改口）',
+                        area: ['860px', '360px'],
+                        content: '<table class="layui-table" style="margin:12px;width:calc(100% - 24px)">'
+                            + '<tr><th>轮次</th><th>总蓄积</th><th>每公顷出材量</th><th>档位</th>'
+                            + '<th>所依界代号</th><th>界启用日</th><th>材积表版</th></tr>' + rows + '</table>'
+                            + '<div style="padding:0 16px 16px;color:#999">两回结论各留各的代号，合成一条不算对。</div>'});
+                });
+            }
+            if (o.event === 'recheck') {
+                layer.open({type: 2, title: '整改复验（单号 ' + o.data.designNo + '，重算追加不并条）', shade: 0.1,
+                    area: ['900px', '680px'],
+                    content: P + 'submitView?designId=' + o.data.id});
+            }
+        });
+    });
+</script>
+</body>
+</html>

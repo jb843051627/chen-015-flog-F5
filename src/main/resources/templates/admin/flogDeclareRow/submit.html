@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <th:block th:include="include :: header('清册整册提交')"/>
+    <style>
+        .declare-row { display: flex; gap: 6px; margin-bottom: 8px; align-items: center; }
+        .declare-row select, .declare-row input { height: 32px; }
+        .declare-row .layui-input, .declare-row select { font-size: 12px; }
+    </style>
+</head>
+<body>
+<div style="padding: 14px;">
+    <form class="layui-form" onsubmit="return false;">
+        <div class="layui-form-item">
+            <label class="layui-form-label">批次号</label>
+            <div class="layui-input-inline">
+                <input type="text" id="batchNo" autocomplete="off" placeholder="一册一个批次号" class="layui-input">
+            </div>
+            <label class="layui-form-label">底档字号</label>
+            <div class="layui-input-inline">
+                <input type="text" id="siteNo" autocomplete="off" placeholder="整册只许一家" class="layui-input">
+            </div>
+            <button type="button" class="layui-btn layui-btn-sm layui-btn-primary" id="add-line">
+                <i class="layui-icon layui-icon-add-1"></i> 添一行
+            </button>
+        </div>
+    </form>
+    <div style="margin: 6px 0 10px 110px; color: #999; font-size: 12px;">
+        一册越过 500 行整册退回、一行不留；一行也不送，回执只写“空册”。一行不合格只挂那一行，同册余下行照常入账。
+    </div>
+    <div id="rows"></div>
+    <div style="margin-left: 110px; margin-top: 10px;">
+        <button class="layui-btn layui-btn-normal layui-btn-sm" id="do-submit">
+            <i class="layui-icon layui-icon-ok"></i> 整册提交
+        </button>
+        <button class="layui-btn layui-btn-primary layui-btn-sm" id="do-clear">清空</button>
+    </div>
+</div>
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['jquery', 'layer', 'form'], function () {
+        let $ = layui.jquery, layer = layui.layer, form = layui.form;
+        let MODULE_PATH = rootPath + '/FlogDeclareRowController/';
+
+        function lineHtml() {
+            return '<div class="declare-row">' +
+                '<input type="text" class="layui-input f-subcomp" placeholder="小班号" style="width:110px">' +
+                '<select class="f-mode" style="width:120px">' +
+                    '<option value="4">抚育采伐</option><option value="5">更新采伐</option>' +
+                    '<option value="6">低改</option><option value="1">皆伐(主)</option>' +
+                    '<option value="2">渐伐(主)</option><option value="3">择伐(主)</option></select>' +
+                '<select class="f-kind" style="width:90px"><option value="2">商品林</option><option value="1">公益林</option></select>' +
+                '<select class="f-dispute" style="width:80px"><option value="0">无诉</option><option value="1">在诉</option></select>' +
+                '<input type="number" step="0.01" class="layui-input f-area" placeholder="面积ha" style="width:90px">' +
+                '<select class="f-survey" style="width:80px"><option value="0">未附材料</option><option value="1">已附材料</option></select>' +
+                '<input type="number" step="0.01" class="layui-input f-qty" placeholder="申报蓄积" style="width:100px">' +
+                '<input type="number" step="0.01" class="layui-input f-recv" placeholder="核收(可空)" style="width:100px">' +
+                '<button type="button" class="layui-btn layui-btn-danger layui-btn-sm f-del"><i class="layui-icon layui-icon-close"></i></button>' +
+                '</div>';
+        }
+
+        function addLine() {
+            $('#rows').append(lineHtml());
+            form.render('select');
+        }
+
+        $('#add-line').on('click', addLine);
+        $('#rows').on('click', '.f-del', function () { $(this).closest('.declare-row').remove(); });
+        $('#do-clear').on('click', function () { $('#rows').empty(); $('#batchNo').val(''); $('#siteNo').val(''); });
+        addLine();
+
+        function num(v) { return v === '' || v == null ? null : Number(v); }
+
+        $('#do-submit').on('click', function () {
+            let batchNo = $('#batchNo').val();
+            let siteNo = $('#siteNo').val();
+            if (!batchNo) { layer.msg('先填批次号', {icon: 2}); return; }
+            let rows = [];
+            let bad = false;
+            $('#rows .declare-row').each(function () {
+                let $r = $(this);
+                let subcomp = $r.find('.f-subcomp').val();
+                let qty = num($r.find('.f-qty').val());
+                if (!subcomp || qty == null) { bad = true; return; }
+                rows.push({
+                    subcompNo: subcomp, siteNo: siteNo,
+                    cutMode: num($r.find('.f-mode').val()),
+                    forestKind: num($r.find('.f-kind').val()),
+                    disputeFlag: num($r.find('.f-dispute').val()),
+                    area: num($r.find('.f-area').val()),
+                    surveyFlag: num($r.find('.f-survey').val()),
+                    qty: qty, recvQty: num($r.find('.f-recv').val())
+                });
+            });
+            if (bad) { layer.msg('每行都得填小班号与申报蓄积', {icon: 2}); return; }
+            let loading = layer.load();
+            $.ajax({url: MODULE_PATH + 'submitJson', type: 'post', contentType: 'application/json',
+                data: JSON.stringify({batchNo: batchNo, rows: rows}), dataType: 'json',
+                success: function (r) {
+                    layer.close(loading);
+                    if (r.code === 200) {
+                        let d = r.data;
+                        layer.alert('<div style="line-height:28px">落法：<b>' + d.recvStatusText + '</b><br>' +
+                            '本册总计 <b>' + d.totalRows + '</b> 行<br>收下 <b>' + d.acceptedRows +
+                            '</b> 行<br>挂起 <b>' + d.suspendedRows + '</b> 行<br><span style="color:#999">' +
+                            d.message + '</span></div>', {title: '回执'}, function (i) {
+                            layer.close(i);
+                            parent.layer.close(parent.layer.getFrameIndex(window.name));
+                            if (parent.layui && parent.layui.table) { parent.layui.table.reload('declare-table'); }
+                        });
+                    } else { layer.msg(r.msg || '整册没被收下', {icon: 2, time: 4000}); }
+                },
+                error: function () { layer.close(loading); layer.msg('请求失败', {icon: 2}); }});
+        });
+    });
+</script>
+</body>
+</html>

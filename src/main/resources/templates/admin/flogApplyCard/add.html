@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <th:block th:include="include :: header('伐区采伐申请建档卡 · 立卡')"/>
+</head>
+<body>
+<form class="layui-form">
+    <div class="mainBox">
+        <div class="main-container">
+            <div class="layui-form-item">
+                <label class="layui-form-label">所属底档</label>
+                <div class="layui-input-block">
+                    <select name="siteId" lay-filter="siteId" lay-search="">
+                        <option value="">请选择在册底档（以档内字号为准）</option>
+                        <option th:each="d : ${standDocs}" th:value="${d.id}"
+                                th:text="${d.siteNo} + '｜' + ${d.siteName} + '（' + ${d.siteType} + '）'"></option>
+                    </select>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">小班号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="subcompNo" autocomplete="off" placeholder="同一字号+小班号再报并版" class="layui-input">
+                </div>
+                <label class="layui-form-label">伐区名号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="cutBlockNo" autocomplete="off" placeholder="一片伐区一名号" class="layui-input">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">采伐方式</label>
+                <div class="layui-input-inline">
+                    <select name="cutMode" lay-filter="cutMode">
+                        <option value="">请选择</option>
+                        <option value="1">主伐·皆伐</option>
+                        <option value="2">主伐·渐伐</option>
+                        <option value="3">主伐·择伐</option>
+                        <option value="4">抚育采伐</option>
+                        <option value="5">更新采伐</option>
+                        <option value="6">低质低效林改造</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- 通用两栏：拟采蓄积、新报拟采面积 -->
+            <div class="layui-form-item">
+                <label class="layui-form-label">拟采蓄积(m³)</label>
+                <div class="layui-input-inline">
+                    <input type="number" step="0.01" min="0.01" name="qty" autocomplete="off" placeholder="合并后拟采蓄积，须为正" class="layui-input">
+                </div>
+                <label class="layui-form-label">新报面积(ha)</label>
+                <div class="layui-input-inline">
+                    <input type="number" step="0.01" min="0" name="fineAmt" autocomplete="off" placeholder="皆伐时必填" class="layui-input">
+                </div>
+            </div>
+
+            <!-- 皆伐：面积(用上新报面积)与株数 -->
+            <div class="layui-form-item mode-field" data-modes="1">
+                <label class="layui-form-label">皆伐·株数</label>
+                <div class="layui-input-inline">
+                    <input type="number" step="1" min="1" name="clearTrees" autocomplete="off" class="layui-input">
+                </div>
+                <div class="layui-form-mid layui-word-aux">面积填上面“新报面积”，两栏皆伐都缺不得</div>
+            </div>
+
+            <!-- 渐伐：分年次数、间隔年数 -->
+            <div class="layui-form-item mode-field" data-modes="2">
+                <label class="layui-form-label">渐伐·分年次数</label>
+                <div class="layui-input-inline">
+                    <input type="number" step="1" min="1" name="gradYears" autocomplete="off" class="layui-input">
+                </div>
+                <label class="layui-form-label">间隔年数</label>
+                <div class="layui-input-inline">
+                    <input type="number" step="1" min="1" name="gradInterval" autocomplete="off" class="layui-input">
+                </div>
+            </div>
+
+            <!-- 择伐：择伐强度、保留株数 -->
+            <div class="layui-form-item mode-field" data-modes="3">
+                <label class="layui-form-label">择伐·强度(%)</label>
+                <div class="layui-input-inline">
+                    <input type="number" step="0.01" min="0.01" name="selectIntensity" autocomplete="off" class="layui-input">
+                </div>
+                <label class="layui-form-label">保留株数</label>
+                <div class="layui-input-inline">
+                    <input type="number" step="1" min="1" name="selectKeepTrees" autocomplete="off" class="layui-input">
+                </div>
+            </div>
+
+            <!-- 抚育采伐：抚育办法、每公顷采出量 -->
+            <div class="layui-form-item mode-field" data-modes="4">
+                <label class="layui-form-label">抚育办法</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="tendMethod" autocomplete="off" class="layui-input">
+                </div>
+                <label class="layui-form-label">每公顷采出量</label>
+                <div class="layui-input-inline">
+                    <input type="number" step="0.01" min="0.01" name="tendPerHa" autocomplete="off" class="layui-input">
+                </div>
+            </div>
+
+            <!-- 更新采伐：更新方式、完成年度 -->
+            <div class="layui-form-item mode-field" data-modes="5">
+                <label class="layui-form-label">更新方式</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="renewMode" autocomplete="off" class="layui-input">
+                </div>
+                <label class="layui-form-label">完成年度</label>
+                <div class="layui-input-inline">
+                    <input type="number" step="1" min="1900" name="renewFinishYear" autocomplete="off" class="layui-input">
+                </div>
+            </div>
+
+            <!-- 低质低效林改造：目标树种 -->
+            <div class="layui-form-item mode-field" data-modes="6">
+                <label class="layui-form-label">目标树种</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="reformTree" autocomplete="off" class="layui-input">
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">备注</label>
+                <div class="layui-input-block">
+                    <textarea name="remark" class="layui-textarea"></textarea>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <div class="layui-input-block layui-word-aux">
+                    卡号、版次、取用顺位、核验串、额度扣减均由系统折算回填，界面不设入口；提交后卡处“待核对”，核对成形才钉核验串。
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="bottom">
+        <div class="button-container">
+            <button type="submit" class="layui-btn layui-btn-normal layui-btn-sm" lay-submit lay-filter="card-save">
+                <i class="layui-icon layui-icon-ok"></i> 提交立卡
+            </button>
+            <button type="reset" class="layui-btn layui-btn-primary layui-btn-sm">重置</button>
+        </div>
+    </div>
+</form>
+<th:block th:include="include :: footer"/>
+<script th:src="@{/static/component/flogCardForm.js}"></script>
+<script>
+    window.FLOG_FORM = {filterName: 'card-save', url: rootPath + '/FlogApplyCardController/add'};
+</script>
+</body>
+</html>

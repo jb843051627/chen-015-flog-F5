@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.pollix.at/thymeleaf/shiro">
+<head>
+    <th:block th:include="include :: header('清册差异清单')"/>
+</head>
+<body>
+<div style="padding: 14px;">
+    <form class="layui-form" onsubmit="return false;">
+        <div class="layui-form-item">
+            <label class="layui-form-label">办理情形</label>
+            <div class="layui-input-inline">
+                <select id="diff-status">
+                    <option value="">全部</option>
+                    <option value="0">待办</option>
+                    <option value="1">已入帐</option>
+                    <option value="2">驳回</option>
+                </select>
+            </div>
+            <button class="pear-btn pear-btn-md pear-btn-primary" id="q-btn">
+                <i class="layui-icon layui-icon-search"></i> 查询
+            </button>
+            <button shiro:hasPermission="flog:flogDeclareRow:add" type="button"
+                    class="pear-btn pear-btn-md" id="reg-btn">
+                <i class="layui-icon layui-icon-add-1"></i> 登记差异
+            </button>
+        </div>
+    </form>
+    <table id="diff-table" lay-filter="diff-table"></table>
+</div>
+
+<script type="text/html" id="diff-bar">
+    {{#  if(d.status === 0){ }}
+    <button shiro:hasPermission="flog:flogDeclareRow:edit"
+            class="pear-btn pear-btn-primary pear-btn-sm" lay-event="approve">按新数入帐</button>
+    <button shiro:hasPermission="flog:flogDeclareRow:edit"
+            class="pear-btn pear-btn-danger pear-btn-sm" lay-event="reject">驳回</button>
+    {{#  } }}
+</script>
+
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['table', 'jquery', 'layer', 'form'], function () {
+        let table = layui.table, $ = layui.jquery, layer = layui.layer, form = layui.form;
+        let MODULE_PATH = rootPath + '/FlogDeclareRowController/';
+        let KIND = {1: '蓄积调整', 2: '其它更正'};
+        let STAT = {0: '待办', 1: '已入帐', 2: '驳回'};
+
+        let cols = [[
+            {title: '批次号', field: 'batchNo', width: 150},
+            {title: '行次', field: 'rowNo', width: 70},
+            {title: '底档字号', field: 'siteNo', width: 90},
+            {title: '小班号', field: 'subcompNo', width: 100},
+            {title: '种类', field: 'diffKind', width: 90, templet: function (d) { return KIND[d.diffKind] || ''; }},
+            {title: '原数(m³)', field: 'oldQty', width: 100},
+            {title: '新数(m³)', field: 'newQty', width: 100},
+            {title: '情形', field: 'status', width: 80, templet: function (d) { return STAT[d.status]; }},
+            {title: '办理人', field: 'handleBy', width: 100},
+            {title: '办理时刻', field: 'handleTime', width: 160},
+            {title: '备注', field: 'remark', minWidth: 160},
+            {title: '操作', toolbar: '#diff-bar', width: 200, fixed: 'right'}
+        ]];
+
+        function load() {
+            $.get(MODULE_PATH + 'diff', {status: $('#diff-status').val()}, function (r) {
+                if (r.code === 200) {
+                    table.render({elem: '#diff-table', cols: cols, data: r.data || [], skin: 'line',
+                        page: false, text: {none: '没有差异单'}});
+                }
+            }, 'json');
+        }
+
+        form.render();
+        load();
+        $('#q-btn').on('click', load);
+
+        $('#reg-btn').on('click', function () {
+            layer.open({type: 1, title: '登记差异（重送不覆盖旧账，改蓄积走这里）', area: ['480px', '420px'],
+                content:
+                '<form class="layui-form" style="padding:18px" onsubmit="return false;">' +
+                '<div class="layui-form-item"><label class="layui-form-label">批次号</label>' +
+                '<div class="layui-input-block"><input class="layui-input" id="d-batch"></div></div>' +
+                '<div class="layui-form-item"><label class="layui-form-label">原行次</label>' +
+                '<div class="layui-input-block"><input type="number" class="layui-input" id="d-row"></div></div>' +
+                '<div class="layui-form-item"><label class="layui-form-label">改成蓄积</label>' +
+                '<div class="layui-input-block"><input type="number" step="0.01" class="layui-input" id="d-new">' +
+                '<div class="layui-word-aux">不得大过本行原申报数</div></div></div>' +
+                '<div class="layui-form-item"><label class="layui-form-label">说明</label>' +
+                '<div class="layui-input-block"><textarea class="layui-textarea" id="d-remark"></textarea></div></div>' +
+                '<div class="layui-form-item"><div class="layui-input-block">' +
+                '<button class="layui-btn layui-btn-normal layui-btn-sm" id="d-ok">登记</button></div></div>' +
+                '</form>',
+                success: function () {
+                    $('#d-ok').on('click', function () {
+                        $.post(MODULE_PATH + 'diff/register', {
+                            batchNo: $('#d-batch').val(), rowNo: $('#d-row').val(),
+                            diffKind: 1, newQty: $('#d-new').val(), remark: $('#d-remark').val()
+                        }, function (r) {
+                            if (r.code === 200) {
+                                layer.msg('差异已登记', {icon: 1, time: 1200}, function () {
+                                    layer.closeAll(); load();
+                                });
+                            } else { layer.msg(r.msg || '登记不上', {icon: 2, time: 3500}); }
+                        }, 'json');
+                    });
+                }
+            });
+        });
+
+        table.on('tool(diff-table)', function (obj) {
+            let approve = obj.event === 'approve';
+            if (obj.event !== 'approve' && obj.event !== 'reject') { return; }
+            layer.confirm(approve ? '按新数 ' + obj.data.newQty + ' 立方米入帐？' : '驳回这笔差异？',
+                {icon: 3, title: '差异办结'}, function (idx) {
+                    layer.close(idx);
+                    $.post(MODULE_PATH + 'diff/handle/' + obj.data.id, {approve: approve}, function (r) {
+                        layer.msg(r.code === 200 ? r.msg : (r.msg || '办结失败'),
+                            {icon: r.code === 200 ? 1 : 2, time: 2000},
+                            function () { if (r.code === 200) { load(); } });
+                    }, 'json');
+                });
+        });
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.pollix.at/thymeleaf/shiro">
+<head>
+    <th:block th:include="include :: header('伐区采伐申请建档卡')"/>
+</head>
+<body class="pear-container">
+<div class="layui-card">
+    <div class="layui-card-body">
+        <form class="layui-form" action="">
+            <div class="layui-form-item">
+                <label class="layui-form-label">建档卡号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="billNo" placeholder="卡号" class="layui-input">
+                </div>
+                <label class="layui-form-label">底档字号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="siteNo" placeholder="以字号核，不认名号" class="layui-input">
+                </div>
+                <label class="layui-form-label">小班号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="subcompNo" class="layui-input">
+                </div>
+                <label class="layui-form-label">采伐方式</label>
+                <div class="layui-input-inline">
+                    <select name="cutMode">
+                        <option value="">全部</option>
+                        <option value="1">皆伐</option>
+                        <option value="2">渐伐</option>
+                        <option value="3">择伐</option>
+                        <option value="4">抚育采伐</option>
+                        <option value="5">更新采伐</option>
+                        <option value="6">低质低效林改造</option>
+                    </select>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">伐区名号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="cutBlockNo" class="layui-input">
+                </div>
+                <label class="layui-form-label">进展</label>
+                <div class="layui-input-inline">
+                    <select name="status">
+                        <option value="">全部</option>
+                        <option value="0">待核对</option>
+                        <option value="1">已核对</option>
+                        <option value="2">已压死</option>
+                    </select>
+                </div>
+                <button class="pear-btn pear-btn-md pear-btn-primary" lay-submit lay-filter="card-query">
+                    <i class="layui-icon layui-icon-search"></i> 查询
+                </button>
+                <button type="reset" class="pear-btn pear-btn-md">
+                    <i class="layui-icon layui-icon-refresh"></i> 重置
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="layui-card">
+    <div class="layui-card-body">
+        <table id="card-table" lay-filter="card-table"></table>
+    </div>
+</div>
+</body>
+
+<script type="text/html" id="card-toolbar">
+    <button shiro:hasPermission="flog:flogApplyCard:add" class="pear-btn pear-btn-primary pear-btn-md" lay-event="add">
+        <i class="layui-icon layui-icon-add-1"></i> 立卡/重录
+    </button>
+    <button shiro:hasPermission="flog:flogApplyCard:view" class="pear-btn pear-btn-md" lay-event="quota">
+        <i class="layui-icon layui-icon-component"></i> 额度账
+    </button>
+</script>
+
+<script type="text/html" id="card-bar">
+    <button shiro:hasPermission="flog:flogApplyCard:edit" class="pear-btn pear-btn-primary pear-btn-sm" lay-event="edit" title="重录（升一版，旧版留检）">
+        <i class="layui-icon layui-icon-edit"></i>
+    </button>
+    <button shiro:hasPermission="flog:flogApplyCard:edit" class="pear-btn pear-btn-normal pear-btn-sm" lay-event="check" title="核对成形（钉核验串）">
+        <i class="layui-icon layui-icon-ok"></i>
+    </button>
+    <button shiro:hasPermission="flog:flogApplyCard:edit" class="pear-btn pear-btn-warming pear-btn-sm" lay-event="press" title="压死了断（退额度）">
+        <i class="layui-icon layui-icon-close"></i>
+    </button>
+    <button shiro:hasPermission="flog:flogApplyCard:view" class="pear-btn pear-btn-sm" lay-event="history" title="旧版翻检">
+        <i class="layui-icon layui-icon-time"></i>
+    </button>
+</script>
+
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['table', 'form', 'jquery'], function () {
+        let table = layui.table;
+        let form = layui.form;
+        let $ = layui.jquery;
+        let MODULE_PATH = rootPath + "/FlogApplyCardController/";
+
+        let MODE = {1: '皆伐', 2: '渐伐', 3: '择伐', 4: '抚育采伐', 5: '更新采伐', 6: '低质低效林改造'};
+        let GRADE = {1: '轻度', 2: '中度', 3: '重度'};
+        let STAT = {0: '待核对', 1: '已核对', 2: '已压死'};
+
+        let cols = [[
+            {title: '建档卡号', field: 'billNo', align: 'center', width: 170},
+            {title: '版次', field: 'nodeNo', align: 'center', width: 60},
+            {title: '底档字号', field: 'siteNo', align: 'center', width: 90},
+            {title: '小班号', field: 'subcompNo', align: 'center', width: 100},
+            {title: '伐区名号', field: 'cutBlockNo', align: 'center', width: 120},
+            {title: '采伐方式', field: 'cutMode', align: 'center', width: 120, templet: function (d) {
+                return MODE[d.cutMode] || '';
+            }},
+            {title: '拟采蓄积(m³)', field: 'qty', align: 'center', width: 110},
+            {title: '新报面积(ha)', field: 'fineAmt', align: 'center', width: 110},
+            {title: '取用顺位', field: 'gradeLevel', align: 'center', width: 90, templet: function (d) {
+                return GRADE[d.gradeLevel] || '';
+            }},
+            {title: '进展', field: 'status', align: 'center', width: 90, templet: function (d) {
+                return STAT[d.status];
+            }},
+            {title: '立卡人', field: 'registerBy', align: 'center', width: 100},
+            {title: '立卡时刻', field: 'registerTime', align: 'center', width: 165},
+            {title: '核验串', field: 'content', align: 'center', width: 230},
+            {title: '操作', toolbar: '#card-bar', align: 'center', width: 170, fixed: 'right'}
+        ]];
+
+        table.render({
+            elem: '#card-table',
+            url: MODULE_PATH + 'list',
+            page: true,
+            method: 'get',
+            cols: cols,
+            skin: 'line',
+            toolbar: '#card-toolbar',
+            defaultToolbar: ['refresh', 'filter', 'print', 'exports']
+        });
+
+        form.on('submit(card-query)', function (data) {
+            table.reload('card-table', {where: data.field, pageNum: 1});
+            return false;
+        });
+
+        table.on('tool(card-table)', function (obj) {
+            if (obj.event === 'edit') {
+                layer.open({
+                    type: 2, title: '重录（旧版退档留检，另立新版）', shade: 0.1,
+                    area: ['760px', '640px'], content: MODULE_PATH + 'edit/' + obj.data.id
+                });
+            } else if (obj.event === 'check') {
+                layer.confirm('核对成形？成形后这一版钉住、覆不掉。', {icon: 3, title: '核对'}, function (idx) {
+                    layer.close(idx);
+                    doPost(MODULE_PATH + 'check/' + obj.data.id, '核对成形');
+                });
+            } else if (obj.event === 'press') {
+                layer.confirm('压死了断？占用额度将原样退回本年账。', {icon: 3, title: '压死'}, function (idx) {
+                    layer.close(idx);
+                    doPost(MODULE_PATH + 'press/' + obj.data.id, '压死了断');
+                });
+            } else if (obj.event === 'history') {
+                window.open(MODULE_PATH + 'history?billNo=' + encodeURIComponent(obj.data.billNo), '_blank');
+            }
+        });
+
+        table.on('toolbar(card-table)', function (obj) {
+            if (obj.event === 'add') {
+                layer.open({
+                    type: 2, title: '立卡（同一家同一小班再报自动并版）', shade: 0.1,
+                    area: ['760px', '640px'], content: MODULE_PATH + 'add'
+                });
+            } else if (obj.event === 'quota') {
+                layer.open({
+                    type: 2, title: '年度额度账（已扣/尚存同屏）', shade: 0.1,
+                    area: ['900px', '600px'], content: MODULE_PATH + 'quotaView'
+                });
+            }
+        });
+
+        function doPost(url, title) {
+            let loading = layer.load();
+            $.ajax({
+                url: url, type: 'post', dataType: 'json',
+                success: function (r) {
+                    layer.close(loading);
+                    if (r.code === 200) {
+                        layer.msg(r.msg || (title + '成功'), {icon: 1, time: 1200}, function () {
+                            table.reload('card-table');
+                        });
+                    } else {
+                        layer.msg(r.msg || '操作失败', {icon: 2});
+                    }
+                },
+                error: function () { layer.close(loading); layer.msg('请求失败', {icon: 2}); }
+            });
+        }
+    });
+</script>
+</body>
+</html>

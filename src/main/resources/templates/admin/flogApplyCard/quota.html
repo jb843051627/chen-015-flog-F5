@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <th:block th:include="include :: header('年度采伐额度账')"/>
+</head>
+<body class="pear-container">
+<div class="layui-card">
+    <div class="layui-card-body">
+        <form class="layui-form">
+            <div class="layui-form-item">
+                <label class="layui-form-label">底档字号</label>
+                <div class="layui-input-inline" style="width:340px;">
+                    <select name="siteNo" lay-filter="siteNo" lay-search="">
+                        <option value="">请选择</option>
+                        <option th:each="d : ${standDocs}" th:value="${d.siteNo}"
+                                th:text="${d.siteNo} + '｜' + ${d.siteName}"></option>
+                    </select>
+                </div>
+                <label class="layui-form-label">年度</label>
+                <div class="layui-input-inline">
+                    <input type="number" name="quotaYear" class="layui-input" th:value="${#dates.year(#dates.createNow())}">
+                </div>
+                <button class="pear-btn pear-btn-primary pear-btn-md" lay-submit lay-filter="quota-query">
+                    <i class="layui-icon layui-icon-search"></i> 对账
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="layui-card" id="quota-card" style="display:none;">
+    <div class="layui-card-header">
+        <span id="q-site"></span> <span id="q-year"></span> 年度
+    </div>
+    <div class="layui-card-body">
+        <div class="layui-row layui-col-space15">
+            <div class="layui-col-md4">
+                <div class="layui-card"><div class="layui-card-body">
+                    <div style="color:#888;">本年可占总数(m³)</div>
+                    <h2 id="q-total" style="margin:6px 0;"></h2>
+                </div></div>
+            </div>
+            <div class="layui-col-md4">
+                <div class="layui-card"><div class="layui-card-body">
+                    <div style="color:#888;">已扣合计(m³)</div>
+                    <h2 id="q-used" style="margin:6px 0;color:#FF9800;"></h2>
+                </div></div>
+            </div>
+            <div class="layui-col-md4">
+                <div class="layui-card"><div class="layui-card-body">
+                    <div style="color:#888;">尚存(m³)</div>
+                    <h2 id="q-remain" style="margin:6px 0;color:#16b777;"></h2>
+                </div></div>
+            </div>
+        </div>
+        <div class="layui-word-aux" style="margin:8px 0;">已扣与尚存出自同一回计算，页面不自算；下列为现行未压死、占着本年额度的卡。</div>
+        <table class="layui-table">
+            <thead>
+            <tr>
+                <th>建档卡号</th><th>版次</th><th>小班号</th><th>伐区名号</th>
+                <th>顺位</th><th>进展</th><th>占用(m³)</th><th>立卡人</th><th>立卡时刻</th>
+                <th>最近办理人</th><th>最近办理时刻</th>
+            </tr>
+            </thead>
+            <tbody id="q-lines"></tbody>
+        </table>
+    </div>
+</div>
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['form', 'jquery', 'layer'], function () {
+        let form = layui.form, $ = layui.jquery, layer = layui.layer;
+        let GRADE = {1: '轻度', 2: '中度', 3: '重度'};
+        let STAT = {0: '待核对', 1: '已核对', 2: '已压死'};
+        let fmt = function (t) { return t || ''; };
+
+        form.on('submit(quota-query)', function (data) {
+            if (!data.field.siteNo) { layer.msg('请先选底档字号', {icon: 3}); return false; }
+            let loading = layer.load();
+            $.ajax({
+                url: rootPath + '/FlogApplyCardController/quota',
+                data: data.field, type: 'get', dataType: 'json',
+                success: function (r) {
+                    layer.close(loading);
+                    if (r.code !== 200) { layer.msg(r.msg || '对账失败', {icon: 2}); return; }
+                    let q = r.data.quota, lines = r.data.occupyLines || [];
+                    $('#q-site').text(q.siteName + '（' + q.siteNo + '）');
+                    $('#q-year').text(q.quotaYear);
+                    $('#q-total').text(q.totalQty);
+                    $('#q-used').text(q.occupiedQty);
+                    $('#q-remain').text(q.remainQty);
+                    let html = '';
+                    lines.forEach(function (l) {
+                        html += '<tr><td>' + l.billNo + '</td><td>' + l.nodeNo + '</td><td>' + (l.subcompNo || '') +
+                            '</td><td>' + (l.cutBlockNo || '') + '</td><td>' + (GRADE[l.gradeLevel] || '') +
+                            '</td><td>' + STAT[l.status] + '</td><td>' + l.qty + '</td><td>' + (l.registerBy || '') +
+                            '</td><td>' + fmt(l.registerTime) + '</td><td>' + (l.lastOpBy || '') +
+                            '</td><td>' + fmt(l.lastOpTime) + '</td></tr>';
+                    });
+                    if (!lines.length) { html = '<tr><td colspan="11" style="text-align:center;color:#999;">本年暂无占额卡</td></tr>'; }
+                    $('#q-lines').html(html);
+                    $('#quota-card').show();
+                },
+                error: function () { layer.close(loading); layer.msg('请求失败', {icon: 2}); }
+            });
+            return false;
+        });
+    });
+</script>
+</body>
+</html>

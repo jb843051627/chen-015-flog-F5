@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.pollix.at/thymeleaf/shiro">
+<head>
+    <th:block th:include="include :: header('伐区申报清册逐行核收')"/>
+</head>
+<body class="pear-container">
+<div class="layui-card">
+    <div class="layui-card-body">
+        <form class="layui-form" action="">
+            <div class="layui-form-item">
+                <label class="layui-form-label">批次号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="batchNo" placeholder="一册一个批次号" class="layui-input">
+                </div>
+                <label class="layui-form-label">底档字号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="siteNo" class="layui-input">
+                </div>
+                <label class="layui-form-label">落地情形</label>
+                <div class="layui-input-inline">
+                    <select name="status">
+                        <option value="">全部</option>
+                        <option value="1">已收</option>
+                        <option value="2">挂起</option>
+                    </select>
+                </div>
+                <button class="pear-btn pear-btn-md pear-btn-primary" lay-submit lay-filter="row-query">
+                    <i class="layui-icon layui-icon-search"></i> 查询
+                </button>
+                <button type="reset" class="pear-btn pear-btn-md">
+                    <i class="layui-icon layui-icon-refresh"></i> 重置
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="layui-card">
+    <div class="layui-card-body">
+        <table id="declare-table" lay-filter="declare-table"></table>
+    </div>
+</div>
+</body>
+
+<script type="text/html" id="declare-toolbar">
+    <button shiro:hasPermission="flog:flogDeclareRow:add" class="pear-btn pear-btn-primary pear-btn-md" lay-event="row">
+        <i class="layui-icon layui-icon-add-1"></i> 逐行递入
+    </button>
+    <button shiro:hasPermission="flog:flogDeclareRow:add" class="pear-btn pear-btn-md" lay-event="submit">
+        <i class="layui-icon layui-icon-upload"></i> 整册提交
+    </button>
+    <button shiro:hasPermission="flog:flogDeclareRow:add" class="pear-btn pear-btn-md" lay-event="receipt">
+        <i class="layui-icon layui-icon-note"></i> 回执
+    </button>
+    <button shiro:hasPermission="flog:flogDeclareRow:edit" class="pear-btn pear-btn-warming pear-btn-md" lay-event="turn">
+        <i class="layui-icon layui-icon-time"></i> 往期结转
+    </button>
+    <button shiro:hasPermission="flog:flogDeclareRow:view" class="pear-btn pear-btn-md" lay-event="archived">
+        <i class="layui-icon layui-icon-read"></i> 往期页
+    </button>
+    <button shiro:hasPermission="flog:flogDeclareRow:view" class="pear-btn pear-btn-md" lay-event="diff">
+        <i class="layui-icon layui-icon-form"></i> 差异清单
+    </button>
+</script>
+
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['table', 'form', 'jquery', 'layer'], function () {
+        let table = layui.table;
+        let form = layui.form;
+        let $ = layui.jquery;
+        let layer = layui.layer;
+        let MODULE_PATH = rootPath + "/FlogDeclareRowController/";
+
+        let MODE = {1: '皆伐', 2: '渐伐', 3: '择伐', 4: '抚育采伐', 5: '更新采伐', 6: '低质低效林改造'};
+        let KIND = {1: '公益林', 2: '商品林'};
+        let STAT = {1: '已收', 2: '挂起'};
+
+        let cols = [[
+            {title: '批次号', field: 'batchNo', align: 'center', width: 150},
+            {title: '行次', field: 'rowNo', align: 'center', width: 70},
+            {title: '底档字号', field: 'siteNo', align: 'center', width: 90},
+            {title: '小班号', field: 'subcompNo', align: 'center', width: 100},
+            {title: '采伐方式', field: 'cutMode', align: 'center', width: 110, templet: function (d) {
+                return MODE[d.cutMode] || '';
+            }},
+            {title: '林种', field: 'forestKind', align: 'center', width: 80, templet: function (d) {
+                return KIND[d.forestKind] || '';
+            }},
+            {title: '权属在诉', field: 'disputeFlag', align: 'center', width: 90, templet: function (d) {
+                return d.disputeFlag === 1 ? '是' : '否';
+            }},
+            {title: '申报面积(ha)', field: 'area', align: 'center', width: 100},
+            {title: '调查材料', field: 'surveyFlag', align: 'center', width: 90, templet: function (d) {
+                return d.surveyFlag === 1 ? '已附' : '未附';
+            }},
+            {title: '申报蓄积(m³)', field: 'qty', align: 'center', width: 110},
+            {title: '核收蓄积(m³)', field: 'recvQty', align: 'center', width: 110},
+            {title: '落地', field: 'status', align: 'center', width: 80, templet: function (d) {
+                let t = STAT[d.status] || '';
+                if (d.mergeOfRowNo != null) { t += '（并第' + d.mergeOfRowNo + '行）'; }
+                return t;
+            }},
+            {title: '挂起前置项', field: 'itemCode', align: 'center', width: 130},
+            {title: '缘故', field: 'remark', align: 'center', minWidth: 220}
+        ]];
+
+        table.render({
+            elem: '#declare-table',
+            url: MODULE_PATH + 'list',
+            page: true,
+            method: 'get',
+            cols: cols,
+            skin: 'line',
+            toolbar: '#declare-toolbar',
+            defaultToolbar: ['refresh', 'filter', 'print', 'exports']
+        });
+
+        form.on('submit(row-query)', function (data) {
+            table.reload('declare-table', {where: data.field, pageNum: 1});
+            return false;
+        });
+
+        table.on('toolbar(declare-table)', function (obj) {
+            if (obj.event === 'row') {
+                layer.open({type: 2, title: '逐行递入（一行一行地落）', shade: 0.1,
+                    area: ['820px', '640px'], content: MODULE_PATH + 'rowView'});
+            } else if (obj.event === 'submit') {
+                layer.open({type: 2, title: '整册提交（一册一册地过）', shade: 0.1,
+                    area: ['980px', '680px'], content: MODULE_PATH + 'submitView'});
+            } else if (obj.event === 'archived') {
+                layer.open({type: 2, title: '往期页（凭批次号把账拉出来）', shade: 0.1,
+                    area: ['900px', '600px'], content: MODULE_PATH + 'archivedView'});
+            } else if (obj.event === 'diff') {
+                layer.open({type: 2, title: '差异清单（蓄积要改走这一路）', shade: 0.1,
+                    area: ['900px', '600px'], content: MODULE_PATH + 'diffView'});
+            } else if (obj.event === 'receipt') {
+                openReceipt();
+            } else if (obj.event === 'turn') {
+                layer.prompt({title: '结转截止执行期年度（默认本年；进门那年早于本年-2 的已收行转往期）',
+                        value: new Date().getFullYear(), formType: 0},
+                    function (val, idx) {
+                        layer.close(idx);
+                        $.post(MODULE_PATH + 'turn', {asOfYear: val}, function (r) {
+                            layer.msg(r.code === 200 ? r.msg : (r.msg || '结转失败'),
+                                {icon: r.code === 200 ? 1 : 2, time: 2000},
+                                function () { if (r.code === 200) { table.reload('declare-table'); } });
+                        }, 'json');
+                    });
+            }
+        });
+
+        function openReceipt() {
+            layer.prompt({title: '输入批次号查回执（总数/收下/挂起同一次计算）', formType: 0},
+                function (val, idx) {
+                    layer.close(idx);
+                    $.get(MODULE_PATH + 'receipt', {batchNo: val}, function (r) {
+                        if (r.code === 200) {
+                            let d = r.data;
+                            layer.alert(
+                                '<div style="line-height:28px">' +
+                                '批次号：<b>' + d.batchNo + '</b><br>' +
+                                '底档字号：' + d.siteNo + '　执行期：' + d.periodYear + '<br>' +
+                                '收册落法：<b>' + d.recvStatusText + '</b><br>' +
+                                '本册总计：<b>' + d.totalRows + '</b> 行<br>' +
+                                '收下：<b>' + d.acceptedRows + '</b> 行　挂起：<b>' + d.suspendedRows + '</b> 行<br>' +
+                                '回执时刻：' + (d.recvTime || '') + '<br>' +
+                                '<span style="color:#999">' + d.message + '</span></div>',
+                                {title: '清册回执', area: ['460px', '320px']});
+                        } else {
+                            layer.msg(r.msg || '查不到回执', {icon: 2, time: 3000});
+                        }
+                    }, 'json');
+                });
+        }
+    });
+</script>
+</body>
+</html>

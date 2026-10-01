@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.pollix.at/thymeleaf/shiro">
+<head>
+    <th:block th:include="include :: header('伐区调查设计检尺定档')"/>
+</head>
+<body class="pear-container" th:with="recheckId=${designId}">
+<div class="layui-card" th:if="${recheckId == null}">
+    <div class="layui-card-body">
+        <form class="layui-form" id="sd-head">
+            <div class="layui-form-item">
+                <div class="layui-inline">
+                    <label class="layui-form-label">调查设计日</label>
+                    <div class="layui-input-inline" style="width:180px">
+                        <input type="text" name="designDate" id="designDate" autocomplete="off"
+                               class="layui-input" placeholder="取界只认这一天，不看今天" required>
+                    </div>
+                </div>
+                <div class="layui-inline">
+                    <label class="layui-form-label">林地类别</label>
+                    <div class="layui-input-inline" style="width:190px">
+                        <select name="applyScope" lay-verify="required">
+                            <option value="">请选择</option>
+                            <option value="2">商品林</option>
+                            <option value="11">公益林·抚育</option>
+                            <option value="12">公益林·更新</option>
+                            <option value="13">公益林·低质低效林改造</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <div class="layui-inline">
+                    <label class="layui-form-label">底档字号</label>
+                    <div class="layui-input-inline"><input type="text" name="siteNo" class="layui-input" required></div>
+                </div>
+                <div class="layui-inline">
+                    <label class="layui-form-label">小班号</label>
+                    <div class="layui-input-inline"><input type="text" name="subcompNo" class="layui-input" required></div>
+                </div>
+                <div class="layui-inline">
+                    <label class="layui-form-label">伐区名号</label>
+                    <div class="layui-input-inline"><input type="text" name="cutBlockNo" class="layui-input"></div>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <div class="layui-inline">
+                    <label class="layui-form-label">小班面积(公顷)</label>
+                    <div class="layui-input-inline"><input type="number" step="0.01" name="area" class="layui-input" required></div>
+                </div>
+                <div class="layui-inline">
+                    <label class="layui-form-label">出材率</label>
+                    <div class="layui-input-inline"><input type="number" step="0.0001" name="yieldRate" class="layui-input" placeholder="0~1之间" required></div>
+                </div>
+                <div class="layui-inline">
+                    <label class="layui-form-label">调查员</label>
+                    <div class="layui-input-inline"><input type="text" name="surveyBy" class="layui-input"></div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+<div class="layui-card" th:if="${recheckId != null}">
+    <div class="layui-card-body" style="color:#E6A23C">
+        <i class="layui-icon layui-icon-tips"></i>
+        整改复验：沿用原单的小班、类别、面积、出材率与<b>调查设计日</b>——重算请的还是设计日在场的那条界；
+        下方录入整改后重新检尺的株数。旧结论原样留着，本回只追加。
+        <input type="hidden" id="recheckId" th:value="${recheckId}">
+    </div>
+</div>
+<div class="layui-card">
+    <div class="layui-card-body">
+        <div class="layui-form-item">
+            <button type="button" class="pear-btn pear-btn-md" id="add-tree"><i class="layui-icon layui-icon-add-1"></i> 加一株</button>
+            <button type="button" class="pear-btn pear-btn-md" id="del-tree"><i class="layui-icon layui-icon-delete"></i> 删末株</button>
+            <span style="margin-left:12px;color:#999">逐株量胸径(厘米)、树高(米)；负数、9999、零株不进链，退回重录。</span>
+        </div>
+        <table class="layui-table" id="tree-table">
+            <colgroup><col width="70"><col width="160"><col width="160"></colgroup>
+            <thead><tr><th>株序</th><th>胸径(厘米)</th><th>树高(米)</th></tr></thead>
+            <tbody id="tree-body"></tbody>
+        </table>
+    </div>
+</div>
+<div class="layui-card">
+    <div class="layui-card-body">
+        <button shiro:hasPermission="flog:flogSurveyDesign:add"
+                class="pear-btn pear-btn-primary pear-btn-lg" id="sd-submit">
+            <i class="layui-icon layui-icon-ok"></i>
+            <span th:text="${recheckId != null ? '重算并追加复验结论' : '算清并钉档'}"></span>        </button>
+    </div>
+</div>
+<th:block th:include="include :: footer"/>
+<script th:inline="javascript">
+    let RECHECK_ID = /*[[${recheckId}]]*/ null;
+    layui.use(['form', 'jquery', 'layer', 'laydate'], function () {
+        let $ = layui.jquery, layer = layui.layer, laydate = layui.laydate;
+        let P = rootPath + '/FlogSurveyDesignController/';
+        laydate.render({elem: '#designDate', type: 'datetime', format: 'yyyy-MM-dd HH:mm:ss'});
+
+        function rows() { return $('#tree-body tr').length; }
+        function addRow() {
+            let n = rows() + 1;
+            $('#tree-body').append('<tr><td>' + n + '</td>'
+                + '<td><input type="number" step="0.01" class="layui-input dbh" min="0"></td>'
+                + '<td><input type="number" step="0.01" class="layui-input hgt" min="0"></td></tr>');
+        }
+        $('#add-tree').on('click', addRow);
+        $('#del-tree').on('click', function () { $('#tree-body tr:last').remove(); });
+        addRow();
+
+        function collectTrees() {
+            let trees = [];
+            $('#tree-body tr').each(function () {
+                trees.push({
+                    dbh: $(this).find('.dbh').val(),
+                    height: $(this).find('.hgt').val()
+                });
+            });
+            return trees;
+        }
+
+        $('#sd-submit').on('click', function () {
+            if (!rows()) { layer.msg('株数为零，不进链', {icon: 2}); return; }
+            let payload, url;
+            if (RECHECK_ID) {
+                payload = {designId: RECHECK_ID, trees: collectTrees()};
+                url = P + 'recheck';
+            } else {
+                let f = {};
+                $('#sd-head').find('input,select').each(function () { f[this.name] = $(this).val(); });
+                payload = {
+                    designNo: f.designNo || null,
+                    siteNo: f.siteNo, subcompNo: f.subcompNo, cutBlockNo: f.cutBlockNo,
+                    applyScope: parseInt(f.applyScope, 10),
+                    area: f.area, yieldRate: f.yieldRate, surveyBy: f.surveyBy,
+                    designDate: f.designDate, trees: collectTrees()
+                };
+                url = P + 'submit';
+            }
+            let loading = layer.load();
+            $.ajax({url: url, type: 'post', contentType: 'application/json',
+                data: JSON.stringify(payload), dataType: 'json',
+                success: function (r) {
+                    layer.close(loading);
+                    if (r.code !== 200) { layer.msg(r.msg, {icon: 2}); return; }
+                    let d = r.data || {};
+                    let grade = d.basisMissing
+                        ? '<b style="color:#FF5722">无线可依（不评定，别拿邻近日子凑）</b>'
+                        : '档位：<b>' + ['', '轻度', '中度', '重度'][d.gradeLevel] + '</b>';
+                    layer.alert(
+                        '总蓄积 ' + d.totalVolume + ' 立方米<br>每公顷出材量 ' + d.yieldPerHa + '<br>'
+                        + grade + '<br>所依界：' + (d.ruleCode || '—')
+                        + '（' + (d.ruleEffStart || '—') + ' 启用）<br>材积表版：'
+                        + (d.volTableCode || '—') + '<br><br>' + (d.message || ''),
+                        {title: '本回结论（已钉，不再改口）', area: ['520px', '320px']},                        function (i) { layer.close(i); parent.layui.table.reload('sd-table'); });
+                },
+                error: function (xhr) {
+                    layer.close(loading);
+                    let msg = '请求失败';
+                    try { msg = JSON.parse(xhr.responseText).msg; } catch (e) {}
+                    layer.msg(msg, {icon: 2});
+                }});
+        });
+    });
+</script>
+</body>
+</html>

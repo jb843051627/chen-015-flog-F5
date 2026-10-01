@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.pollix.at/thymeleaf/shiro">
+<head>
+    <th:block th:include="include :: header('可采强度界册')"/>
+</head>
+<body class="pear-container">
+<div class="layui-card">
+    <div class="layui-card-body">
+        <form class="layui-form">
+            <div class="layui-form-item">
+                <label class="layui-form-label">界代号</label>
+                <div class="layui-input-inline"><input type="text" name="ruleCode" class="layui-input"></div>
+                <label class="layui-form-label">林地类别</label>
+                <div class="layui-input-inline">
+                    <select name="applyScope">
+                        <option value="">全部</option>
+                        <option value="2">商品林</option>
+                        <option value="11">公益林·抚育</option>
+                        <option value="12">公益林·更新</option>
+                        <option value="13">公益林·低质低效林改造</option>
+                    </select>
+                </div>
+                <label class="layui-form-label">情形</label>
+                <div class="layui-input-inline">
+                    <select name="status">
+                        <option value="">全部</option>
+                        <option value="0">现行</option>
+                        <option value="1">已让位（只供回查）</option>
+                    </select>
+                </div>
+                <button class="pear-btn pear-btn-primary pear-btn-md" lay-submit lay-filter="rule-query">
+                    <i class="layui-icon layui-icon-search"></i> 查询
+                </button>
+                <a class="pear-btn pear-btn-normal pear-btn-md" lay-event="available">
+                    <i class="layui-icon layui-icon-time"></i> 看某日在场的界
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+<div class="layui-card">
+    <div class="layui-card-body">
+        <table id="rule-table" lay-filter="rule-table"></table>
+    </div>
+</div>
+</body>
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['table', 'form', 'jquery'], function () {
+        let table = layui.table, form = layui.form, $ = layui.jquery;
+        let P = rootPath + '/FlogYieldRuleController/';
+        table.render({
+            elem: '#rule-table', url: P + 'list', method: 'get', page: true, skin: 'line',
+            cols: [[
+                {title: '界代号', field: 'ruleCode', width: 150},
+                {title: '线名', field: 'ruleName', width: 220},
+                {title: '林地类别', field: 'applyScope', width: 170, templet: function (d) {
+                    return {2: '商品林', 11: '公益林·抚育', 12: '公益林·更新', 13: '公益林·低改'}[d.applyScope] || d.applyScope;
+                }},
+                {title: '轻界', field: 'th1Max', width: 90},
+                {title: '中界', field: 'th2Max', width: 90},
+                {title: '重界', field: 'th3Max', width: 90, templet: function (d) {
+                    return d.th3Max == null ? '<span class="layui-badge layui-bg-gray">空缺·不设重档</span>' : d.th3Max;
+                }},
+                {title: '启用之日', field: 'effStart', width: 170},
+                {title: '交棒之日(不含)', field: 'effEnd', width: 170, templet: function (d) {
+                    return d.effEnd == null ? '—' : d.effEnd;
+                }},
+                {title: '序位', field: 'priority', width: 70},
+                {title: '在场旗', field: 'presentFlag', width: 80, templet: function (d) {
+                    return d.presentFlag === 1 ? '<span class="layui-badge layui-bg-green">在场</span>'
+                        : '<span class="layui-badge">撤下</span>';
+                }},
+                {title: '情形', field: 'status', width: 90, templet: function (d) {
+                    return d.status === 1 ? '<span class="layui-badge">已让位</span>'
+                        : '<span class="layui-badge layui-bg-green">现行</span>';
+                }}
+            ]]
+        });
+        form.on('submit(rule-query)', function (data) {
+            table.reload('rule-table', {where: data.field, pageNum: 1});
+            return false;
+        });
+        $('.pear-btn-normal').on('click', function () {
+            layer.prompt({title: '看哪个日子在场的界（yyyy-MM-dd）', formType: 0}, function (v, i) {
+                layer.close(i);
+                let scope = $('select[name=applyScope]').val();
+                $.get(P + 'available', {at: v, applyScope: scope || ''}, function (r) {
+                    let list = r.data || [];
+                    if (!list.length) { layer.msg('该日翻不出在场的界——写明无线可依，不拿邻近日子凑', {icon: 0}); return; }
+                    let html = list.map(function (x) {
+                        return x.ruleCode + '（' + x.ruleName + '，序位 ' + x.priority + '，' + x.effStart + ' 启用）';
+                    }).join('<br>');
+                    layer.open({type: 1, title: v + ' 在场的界（序位大者说话）', area: ['520px', '300px'],
+                        content: '<div style="padding:16px;line-height:1.9">' + html + '</div>'});
+                });
+            });
+        });
+    });
+</script>
+</body>
+</html>
