@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.pollix.at/thymeleaf/shiro">
+<head>
+    <th:block th:include="include :: header('起勾销卡')"/>
+</head>
+<body class="pear-container">
+<div class="layui-card">
+    <div class="layui-card-body" style="color:#E6A23C">
+        <i class="layui-icon layui-icon-tips"></i>
+        一小班同时只许压一张活卡：头一张不了断、不止步，第二张立不起来。
+        卡一起就停在<b>报伐</b>口待过，实采株数、实采蓄积过口时再报，此处不填。
+    </div>
+</div>
+<div class="layui-card">
+    <div class="layui-card-body">
+        <form class="layui-form">
+            <div class="layui-form-item">
+                <label class="layui-form-label">底档字号</label>
+                <div class="layui-input-block">
+                    <input type="text" name="siteNo" lay-verify="required" class="layui-input"
+                           placeholder="以字号核，不认名号">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">小班号</label>
+                <div class="layui-input-block">
+                    <input type="text" name="subcompNo" lay-verify="required" class="layui-input">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">伐区名号</label>
+                <div class="layui-input-block">
+                    <input type="text" name="cutBlockNo" class="layui-input"
+                           placeholder="可不填；过报伐口认下设计单时照钉档补">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">备注</label>
+                <div class="layui-input-block">
+                    <textarea name="remark" class="layui-textarea"></textarea>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <button class="pear-btn pear-btn-primary pear-btn-md" lay-submit lay-filter="close-open">
+                    <i class="layui-icon layui-icon-ok"></i> 起卡
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['form', 'jquery', 'layer'], function () {
+        let form = layui.form, $ = layui.jquery, layer = layui.layer;
+        let P = rootPath + '/FlogCloseCardController/';
+        form.on('submit(close-open)', function (data) {
+            let loading = layer.load();
+            $.ajax({
+                url: P + 'open', data: data.field, dataType: 'json', type: 'post',
+                success: function (r) {
+                    layer.close(loading);
+                    if (r.code === 200) {
+                        layer.msg((r.data && r.data.message) || '起卡成功',
+                            {icon: 1, time: 1800}, function () {
+                                parent.layer.close(parent.layer.getFrameIndex(window.name));
+                                if (parent.layui && parent.layui.table) {
+                                    parent.layui.table.reload('close-table');
+                                }
+                            });
+                    } else {
+                        layer.msg(r.msg || '卡立不起来', {icon: 2, time: 3000});
+                    }
+                },
+                error: function () { layer.close(loading); layer.msg('请求失败', {icon: 2}); }
+            });
+            return false;
+        });
+    });
+</script>
+</body>
+</html>

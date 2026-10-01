@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <th:block th:include="include :: header('勾销履历')"/>
+</head>
+<body class="pear-container">
+<div class="layui-card">
+    <div class="layui-card-body">
+        <div id="head" style="font-size:14px;line-height:1.9;"></div>
+    </div>
+</div>
+<div class="layui-card">
+    <div class="layui-card-body">
+        <table id="jrn-table" class="layui-table" style="margin-top:0;">
+            <colgroup>
+                <col width="55"><col width="70"><col width="60"><col width="70">
+                <col width="120"><col width="90"><col width="110"><col width="110">
+                <col width="200"><col width="90"><col width="155">
+            </colgroup>
+            <thead><tr>
+                <th>序</th><th>段</th><th>遍次</th><th>笔目</th>
+                <th>设计单号/被沉序</th><th>实采(株/m³)</th><th>设计(株/m³)</th>
+                <th>差异率(株/蓄)</th><th>说法/回退缘故</th><th>经手人</th><th>落账时刻</th>
+            </tr></thead>
+            <tbody id="jrn-body"></tbody>
+        </table>
+    </div>
+</div>
+<th:block th:include="include :: footer"/>
+<script th:inline="javascript">
+    let CARD_ID = /*[[${cardId}]]*/ null;
+    layui.use(['jquery', 'layer'], function () {
+        let $ = layui.jquery, layer = layui.layer;
+        let P = rootPath + '/FlogCloseCardController/';
+        let STAGE = {0: '报伐', 1: '核株', 2: '验更', 3: '了断'};
+        let ACTION = {1: '过口', 2: '止步', 3: '沉底'};
+        let STAT = {1: '在办', 2: '止步', 3: '已了断'};
+
+        function blank(v) { return (v === null || v === undefined || v === '') ? '—' : v; }
+        function pct(v) { return v == null ? '—' : (v * 100).toFixed(2) + '%'; }
+        function span(text, color) { return '<span style="color:' + color + '">' + text + '</span>'; }
+
+        $.getJSON(P + 'ledgerData/' + CARD_ID, function (r) {
+            if (r.code !== 200 || !r.data) { layer.msg(r.msg || '翻不出', {icon: 2}); return; }
+            let vo = r.data, c = vo.card || {};
+            let verdict = vo.intact
+                ? '<b style="color:#5FB878;font-size:15px;">✓ 整条履历核得过：序连着、指纹首尾相扣，每一笔都与当天那屏合得上号</b>'
+                : '<b style="color:#FF5722;font-size:15px;">✗ 这张卡算没走成：'
+                  + (vo.breakReason || '履历对不上') + '</b>';
+            $('#head').html(
+                '勾销卡号：<b>' + blank(c.bizNo) + '</b>　小班：<b>' + blank(c.siteNo) + '/' + blank(c.subcompNo) + '</b>　'
+                + '停在：<b>' + blank(STAGE[c.stage]) + '</b>　落定：<b>' + blank(STAT[c.status]) + '</b><br>'
+                + '设计单：' + blank(c.designNo) + '　建档卡：' + blank(c.billNo)
+                + (c.haltReason ? '　止步缘故：「' + c.haltReason + '」' : '')
+                + '<br>' + verdict);
+
+            let html = '';
+            vo.lines.forEach(function (j, i) {
+                let alive = vo.alive[i];
+                let ref = j.action === 3 ? ('沉第' + j.refSeq + '笔') : blank(j.designNo);
+                let actual = j.action === 1 ? (blank(j.actualTrees) + ' / ' + blank(j.actualVolume)) : '—';
+                let design = j.action === 1 ? (blank(j.designTrees) + ' / ' + blank(j.designVolume)) : '—';
+                let diff = j.action === 1 ? (pct(j.treeDiffRate) + ' / ' + pct(j.volDiffRate)) : '—';
+                let note = j.diffReason || j.remark || '—';
+                let rowStyle = !alive ? 'style="color:#bbb;text-decoration:line-through;"'
+                    : (j.action === 2 ? 'style="color:#FF5722;"' : '');
+                html += '<tr ' + rowStyle + '>'
+                    + '<td>' + j.seq + '</td>'
+                    + '<td>' + blank(STAGE[j.stage]) + '</td>'
+                    + '<td>' + (j.attemptNo || '—') + '</td>'
+                    + '<td>' + span(blank(ACTION[j.action]), j.action === 3 ? '#999' : (j.action === 2 ? '#FF5722' : '#1E9FFF')) + '</td>'
+                    + '<td>' + ref + '</td>'
+                    + '<td>' + actual + '</td>'
+                    + '<td>' + design + '</td>'
+                    + '<td>' + diff + '</td>'
+                    + '<td>' + $('<div>').text(note).html() + '</td>'
+                    + '<td>' + blank(j.opBy) + '</td>'
+                    + '<td>' + blank(j.opTime) + '</td>'
+                    + '</tr>';
+            });
+            if (!vo.lines.length) {
+                html = '<tr><td colspan="11" style="text-align:center;color:#999">还没有一笔履历</td></tr>';
+            }
+            $('#jrn-body').html(html);
+        });
+    });
+</script>
+</body>
+</html>

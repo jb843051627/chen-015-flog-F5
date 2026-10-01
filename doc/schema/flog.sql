@@ -40,21 +40,76 @@ CREATE TABLE IF NOT EXISTS t_flog_apply_card (
   KEY idx_card_bill (bill_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='伐区采伐申请建档卡';
 
+-- 伐区勾销事务卡：一小班一张活卡，四段挨着走（报伐0/核株1/验更2/了断3）。
+-- stage=卡眼下停着、待过的那一道口（过完几段就是几），由履历流水算成并条件更新钉住，
+-- 屏上填的、经办人口头认的都不作数；status 1在办 2止步 3已了断。
+-- 止步、了断都封卡：止步过后谁也续不进去（同小班可另起一张），了断后连记事都不许改、卡不许抽走。
 CREATE TABLE IF NOT EXISTS t_flog_close_card (
   id bigint NOT NULL COMMENT '主键',
   biz_no varchar(64) DEFAULT NULL COMMENT '伐区勾销事务卡号',
-  stage int DEFAULT NULL COMMENT '当前段次 0..3（报伐/核株/验更/了断）',
-  status int DEFAULT NULL COMMENT '卡的落定 0未起 1在办 2已了断',
-  content varchar(255) DEFAULT NULL COMMENT '勾销记事',
-  last_action varchar(64) DEFAULT NULL COMMENT '最近一次过口动作',
-  del_flag int DEFAULT '0' COMMENT '删除标记 0正常 1删除',
+  site_no varchar(64) DEFAULT NULL COMMENT '编制单位底档字号',
+  subcomp_no varchar(64) DEFAULT NULL COMMENT '小班号',
+  cut_block_no varchar(64) DEFAULT NULL COMMENT '伐区名号',
+  design_id bigint DEFAULT NULL COMMENT '钉过号的调查设计单id',
+  design_no varchar(64) DEFAULT NULL COMMENT '钉过号的调查设计单号',
+  apply_card_id bigint DEFAULT NULL COMMENT '挂上的现行采伐建档卡id（了断摘它、退它的额）',
+  bill_no varchar(64) DEFAULT NULL COMMENT '挂上的采伐建档卡号',
+  stage int DEFAULT NULL COMMENT '当前停着待过的道口 0报伐 1核株 2验更 3了断',
+  status int DEFAULT NULL COMMENT '卡的落定 1在办 2止步 3已了断',
+  halt_reason varchar(500) DEFAULT NULL COMMENT '止步缘故（写“这一段不过了”那一刻落此）',
+  closed_by varchar(64) DEFAULT NULL COMMENT '了断经手人',
+  closed_time datetime DEFAULT NULL COMMENT '了断时刻',
+  active_anchor varchar(160) DEFAULT NULL COMMENT '活卡锚：在办=底档字号#小班号，止步/了断置空；唯一索引保证一小班至多一张活卡',
+  del_flag int DEFAULT '0' COMMENT '删除标记 0正常（勾销卡不许抽走，本列只留形，服务层永不置1）',
+  create_by varchar(64) DEFAULT NULL COMMENT '起卡人',
+  create_time datetime DEFAULT NULL COMMENT '起卡时间',
+  update_by varchar(64) DEFAULT NULL COMMENT '更新者',
+  update_time datetime DEFAULT NULL COMMENT '更新时间',
+  remark varchar(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_close_active_anchor (active_anchor),
+  KEY idx_closebiz_no (biz_no),
+  KEY idx_close_site_sub (site_no, subcomp_no, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='伐区勾销事务卡';
+
+-- 勾销履历：过口/止步/沉底一律只追加，不原地改、不删。回退改口时旧那笔由一笔“沉底”事件沉掉，
+-- 旧行原样留库，与后补的不摆在一处；fp 按序首尾相扣，事后抽卡从了断往回数，缺页/多页/手动补即破。
+CREATE TABLE IF NOT EXISTS t_flog_close_journal (
+  id bigint NOT NULL COMMENT '主键',
+  card_id bigint NOT NULL COMMENT '勾销卡id',
+  biz_no varchar(64) DEFAULT NULL COMMENT '勾销卡号',
+  seq int NOT NULL COMMENT '卡内流水序（从1挨号，断号即缺页）',
+  stage int NOT NULL COMMENT '本段 0报伐 1核株 2验更 3了断',
+  attempt_no int NOT NULL DEFAULT 1 COMMENT '本段第几遍（头一遍1，回退重做挨号）',
+  action int NOT NULL COMMENT '笔目 1过口 2止步 3沉底',
+  ref_seq int DEFAULT NULL COMMENT '沉底事件专用：指被沉掉那笔过口的流水序',
+  design_no varchar(64) DEFAULT NULL COMMENT '报伐：设计单上钉过的号',
+  actual_trees int DEFAULT NULL COMMENT '报伐：实采株数',
+  actual_volume decimal(14,4) DEFAULT NULL COMMENT '报伐：实采蓄积(立方米)',
+  design_trees int DEFAULT NULL COMMENT '核株：设计株数（钉档那轮逐株账数出）',
+  design_volume decimal(14,4) DEFAULT NULL COMMENT '核株：设计蓄积(立方米，钉档结论那笔)',
+  tree_diff_rate decimal(8,4) DEFAULT NULL COMMENT '核株：株数相差比率(实采对设计)',
+  vol_diff_rate decimal(8,4) DEFAULT NULL COMMENT '核株：蓄积相差比率(实采对设计)',
+  diff_reason varchar(500) DEFAULT NULL COMMENT '核株：差过站里那格时的一句说法',
+  cut_area decimal(12,2) DEFAULT NULL COMMENT '验更：采伐面积(公顷，照设计单钉住)',
+  renew_area decimal(12,2) DEFAULT NULL COMMENT '验更：更新造林面积(公顷，小于采伐面积当场点回)',
+  renew_survival decimal(5,2) DEFAULT NULL COMMENT '验更：更新造林成活率(%)',
+  occupy_qty decimal(12,2) DEFAULT NULL COMMENT '了断：退回前该建档卡占着的额度(立方米)',
+  refund_qty decimal(12,2) DEFAULT NULL COMMENT '了断：原样退回的额度(立方米)',
+  op_by varchar(64) DEFAULT NULL COMMENT '本笔经手人',
+  op_time datetime DEFAULT NULL COMMENT '本笔落账时刻',
+  prev_fp varchar(64) DEFAULT NULL COMMENT '上一笔指纹（头一笔为空，链断即破）',
+  fp varchar(64) DEFAULT NULL COMMENT '本笔指纹（落账一刻钉死，改过任何一格都对不上）',
+  del_flag int DEFAULT '0' COMMENT '删除标记 0正常（履历只追加，永不置1）',
   create_by varchar(64) DEFAULT NULL COMMENT '创建者',
   create_time datetime DEFAULT NULL COMMENT '创建时间',
   update_by varchar(64) DEFAULT NULL COMMENT '更新者',
   update_time datetime DEFAULT NULL COMMENT '更新时间',
   remark varchar(500) DEFAULT NULL COMMENT '备注',
-  PRIMARY KEY (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='伐区勾销事务卡';
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_closejrn_card_seq (card_id, seq),
+  KEY idx_closejrn_stage (card_id, stage, action)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='伐区勾销履历流水（只追加+指纹链）';
 
 CREATE TABLE IF NOT EXISTS t_flog_declare_row (
   id bigint NOT NULL COMMENT '主键',
@@ -451,7 +506,15 @@ VALUES
   (910000000000000015, '伐区调查设计', '检尺三级链一处算清并钉档', '/FlogSurveyDesignController/view', 0, 0,
    'flog:flogSurveyDesign:view', 1, 'fa fa-file-text', 95, 0, 'seed', NOW()),
   (910000000000000016, '调查设计提交复验', '提交钉档/整改复验重算追加', '/FlogSurveyDesignController/submit', 0, 910000000000000015,
-   'flog:flogSurveyDesign:add', 2, '', 1, 0, 'seed', NOW());
+   'flog:flogSurveyDesign:add', 2, '', 1, 0, 'seed', NOW()),
+  (910000000000000017, '伐区勾销事务卡', '一小班一张卡：报伐/核株/验更/了断挨着走', '/FlogCloseCardController/view', 0, 0,
+   'flog:flogCloseCard:view', 1, 'fa fa-check-square-o', 96, 0, 'seed', NOW()),
+  (910000000000000018, '勾销卡流转台账', '在办/止步/已了断集合', '/FlogCloseCardController/list', 0, 910000000000000017,
+   'flog:flogCloseCard:list', 2, '', 1, 0, 'seed', NOW()),
+  (910000000000000019, '起卡过口回退止步', '起卡/过口/回退沉底/止步', '/FlogCloseCardController/advance', 0, 910000000000000017,
+   'flog:flogCloseCard:add', 2, '', 2, 0, 'seed', NOW()),
+  (910000000000000020, '勾销履历翻检', '逐笔履历/了断核验', '/FlogCloseCardController/ledger', 0, 910000000000000017,
+   'flog:flogCloseCard:edit', 2, '', 3, 0, 'seed', NOW());
 
 -- 两角色都有的：建档卡查看/立卡/核对压死/删除(1..5)、底档册查看(6)。
 INSERT IGNORE INTO t_sys_permission_role (id, role_id, permission_id, create_by, create_time)
@@ -474,6 +537,10 @@ CROSS JOIN (
   UNION ALL SELECT 14, 910000000000000014
   UNION ALL SELECT 15, 910000000000000015
   UNION ALL SELECT 16, 910000000000000016
+  UNION ALL SELECT 17, 910000000000000017
+  UNION ALL SELECT 18, 910000000000000018
+  UNION ALL SELECT 19, 910000000000000019
+  UNION ALL SELECT 20, 910000000000000020
 ) p;
 
 -- 仅上级账号（管理员）：底档立户收回(7)、额度下达查看(8)、额度批数(9)。

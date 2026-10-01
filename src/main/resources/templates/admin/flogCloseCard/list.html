@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.pollix.at/thymeleaf/shiro">
+<head>
+    <th:block th:include="include :: header('伐区勾销事务卡')"/>
+</head>
+<body class="pear-container">
+<div class="layui-card">
+    <div class="layui-card-body">
+        <form class="layui-form" action="">
+            <div class="layui-form-item">
+                <label class="layui-form-label">勾销卡号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="bizNo" placeholder="卡号" class="layui-input">
+                </div>
+                <label class="layui-form-label">底档字号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="siteNo" placeholder="以字号核" class="layui-input">
+                </div>
+                <label class="layui-form-label">小班号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="subcompNo" class="layui-input">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">停在道口</label>
+                <div class="layui-input-inline">
+                    <select name="stage">
+                        <option value="">全部</option>
+                        <option value="0">报伐</option>
+                        <option value="1">核株</option>
+                        <option value="2">验更</option>
+                        <option value="3">了断</option>
+                    </select>
+                </div>
+                <label class="layui-form-label">落定</label>
+                <div class="layui-input-inline">
+                    <select name="status">
+                        <option value="">全部</option>
+                        <option value="1">在办</option>
+                        <option value="2">止步</option>
+                        <option value="3">已了断</option>
+                    </select>
+                </div>
+                <button class="pear-btn pear-btn-md pear-btn-primary" lay-submit lay-filter="close-query">
+                    <i class="layui-icon layui-icon-search"></i> 查询
+                </button>
+                <button type="reset" class="pear-btn pear-btn-md">
+                    <i class="layui-icon layui-icon-refresh"></i> 重置
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="layui-card">
+    <div class="layui-card-body">
+        <table id="close-table" lay-filter="close-table"></table>
+    </div>
+</div>
+</body>
+
+<script type="text/html" id="close-toolbar">
+    <button shiro:hasPermission="flog:flogCloseCard:add" class="pear-btn pear-btn-primary pear-btn-md" lay-event="open">
+        <i class="layui-icon layui-icon-add-1"></i> 起卡
+    </button>
+    <span style="margin-left:10px;color:#999">一小班一张活卡；四段挨着行：报伐→核株→验更→了断</span>
+</script>
+
+<script type="text/html" id="close-bar">
+    {{#  if (d.status === 1) { }}
+    <button shiro:hasPermission="flog:flogCloseCard:add" class="pear-btn pear-btn-primary pear-btn-sm" lay-event="pass" title="过当前道口">
+        <i class="layui-icon layui-icon-ok"></i>
+    </button>
+    {{#  if (d.stage > 0) { }}
+    <button shiro:hasPermission="flog:flogCloseCard:add" class="pear-btn pear-btn-warming pear-btn-sm" lay-event="rollback" title="退回上一段（旧笔沉底留库）">
+        <i class="layui-icon layui-icon-return"></i>
+    </button>
+    {{#  } }}
+    <button shiro:hasPermission="flog:flogCloseCard:add" class="pear-btn pear-btn-danger pear-btn-sm" lay-event="halt" title="这一段不过了，止步">
+        <i class="layui-icon layui-icon-close"></i>
+    </button>
+    {{#  } }}
+    <button shiro:hasPermission="flog:flogCloseCard:edit" class="pear-btn pear-btn-sm" lay-event="ledger" title="勾销履历">
+        <i class="layui-icon layui-icon-time"></i>
+    </button>
+</script>
+
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['table', 'form', 'jquery'], function () {
+        let table = layui.table;
+        let form = layui.form;
+        let $ = layui.jquery;
+        let P = rootPath + '/FlogCloseCardController/';
+
+        let STAGE = {0: '报伐', 1: '核株', 2: '验更', 3: '了断'};
+        let STAT = {1: '在办', 2: '止步', 3: '已了断'};
+
+        let cols = [[
+            {title: '勾销卡号', field: 'bizNo', align: 'center', width: 170},
+            {title: '底档字号', field: 'siteNo', align: 'center', width: 90},
+            {title: '小班号', field: 'subcompNo', align: 'center', width: 100},
+            {title: '伐区名号', field: 'cutBlockNo', align: 'center', width: 120},
+            {title: '设计单号', field: 'designNo', align: 'center', width: 160},
+            {title: '建档卡号', field: 'billNo', align: 'center', width: 160},
+            {title: '停在道口', field: 'stage', align: 'center', width: 90, templet: function (d) {
+                return STAGE[d.stage] || '';
+            }},
+            {title: '落定', field: 'status', align: 'center', width: 90, templet: function (d) {
+                let color = d.status === 3 ? '#5FB878' : (d.status === 2 ? '#FF5722' : '#1E9FFF');
+                return '<span style="color:' + color + '">' + (STAT[d.status] || '') + '</span>';
+            }},
+            {title: '止步缘故', field: 'haltReason', align: 'center', width: 200},
+            {title: '起卡时间', field: 'createTime', align: 'center', width: 165},
+            {title: '操作', toolbar: '#close-bar', align: 'center', width: 170, fixed: 'right'}
+        ]];
+
+        table.render({
+            elem: '#close-table',
+            url: P + 'list',
+            page: true,
+            method: 'get',
+            cols: cols,
+            skin: 'line',
+            toolbar: '#close-toolbar',
+            defaultToolbar: ['refresh', 'filter', 'print', 'exports']
+        });
+
+        form.on('submit(close-query)', function (data) {
+            table.reload('close-table', {where: data.field, pageNum: 1});
+            return false;
+        });
+
+        table.on('tool(close-table)', function (obj) {
+            if (obj.event === 'pass') {
+                layer.open({
+                    type: 2, title: '过口（卡停在哪段，只过那段的关口）', shade: 0.1,
+                    area: ['720px', '600px'], content: P + 'pass/' + obj.data.id
+                });
+            } else if (obj.event === 'rollback') {
+                layer.prompt({title: '回退到「' + STAGE[obj.data.stage - 1] + '」？旧那笔过口沉底留库，留句回退缘故',
+                              formType: 2, area: ['480px', '160px']}, function (v, idx) {
+                    layer.close(idx);
+                    $.post(P + 'rollback', {id: obj.data.id, stage: obj.data.stage - 1, reason: v}, function (r) {
+                        handleResult(r, '回退');
+                    });
+                });
+            } else if (obj.event === 'halt') {
+                layer.prompt({title: '在「' + STAGE[obj.data.stage] + '」止步？写下“这一段不过了”的缘故',
+                              formType: 2, area: ['480px', '160px']}, function (v, idx) {
+                    layer.close(idx);
+                    $.post(P + 'halt', {id: obj.data.id, stage: obj.data.stage, reason: v}, function (r) {
+                        handleResult(r, '止步');
+                    });
+                });
+            } else if (obj.event === 'ledger') {
+                layer.open({
+                    type: 2, title: '勾销履历（从了断往回报伐当场核验）', shade: 0.1,
+                    area: ['1000px', '640px'], content: P + 'ledger?id=' + obj.data.id
+                });
+            }
+        });
+
+        table.on('toolbar(close-table)', function (obj) {
+            if (obj.event === 'open') {
+                layer.open({
+                    type: 2, title: '起勾销卡（一小班一张活卡）', shade: 0.1,
+                    area: ['640px', '460px'], content: P + 'openPage'
+                });
+            }
+        });
+
+        function handleResult(r, title) {
+            if (r.code === 200) {
+                layer.msg((r.data && r.data.message) || (title + '成功'), {icon: 1, time: 1600}, function () {
+                    table.reload('close-table');
+                });
+            } else {
+                layer.msg(r.msg || '操作没成', {icon: 2, time: 3000});
+            }
+        }
+    });
+</script>
+</body>
+</html>

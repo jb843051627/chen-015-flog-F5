@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <th:block th:include="include :: header('勾销卡过口')"/>
+</head>
+<body class="pear-container">
+<div class="layui-card">
+    <div class="layui-card-body">
+        <div id="stage-bar" style="font-size:15px;text-align:center;padding:10px 0;"></div>
+        <div id="card-tip" style="text-align:center;color:#666;"></div>
+    </div>
+</div>
+
+<div class="layui-card" id="form-card">
+    <div class="layui-card-body">
+        <form class="layui-form">
+            <input type="hidden" name="id" th:value="${cardId}">
+            <input type="hidden" name="stage" id="stage-input">
+
+            <div class="gate" data-stage="0">
+                <div class="layui-form-item">
+                    <label class="layui-form-label">设计单钉过的号</label>
+                    <div class="layui-input-block">
+                        <input type="text" name="designNo" class="layui-input"
+                               placeholder="调查设计单号；号上的小班须与本卡同一处" required>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">实采株数</label>
+                    <div class="layui-input-block">
+                        <input type="number" min="1" step="1" name="actualTrees" class="layui-input" required>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">实采蓄积(m³)</label>
+                    <div class="layui-input-block">
+                        <input type="number" min="0.0001" step="0.0001" name="actualVolume" class="layui-input" required>
+                    </div>
+                </div>
+            </div>
+
+            <div class="gate" data-stage="1">
+                <div class="layui-card-body" style="color:#E6A23C;margin-bottom:10px;">
+                    设计株数、设计蓄积由系统照报伐认下的钉档结论取，不许手填；
+                    两笔相差过站里那格（<b>5%</b>，等于不算过），就得留一句说法，没差过可空着。
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">差异说法</label>
+                    <div class="layui-input-block">
+                        <textarea name="diffReason" class="layui-textarea"
+                                  placeholder="例：山场边角三株雪压木未入设计，蓄积差 6%"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="gate" data-stage="2">
+                <div class="layui-card-body" style="color:#E6A23C;margin-bottom:10px;">
+                    采伐面积照设计单钉住，不在此填；更新造林面积不得小于采伐面积，小了当场点回。
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">更新造林面积(ha)</label>
+                    <div class="layui-input-block">
+                        <input type="number" min="0.0001" step="0.01" name="renewArea" class="layui-input" required>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">成活率(%)</label>
+                    <div class="layui-input-block">
+                        <input type="number" min="0.01" max="100" step="0.01" name="renewSurvival"
+                               class="layui-input" required>
+                    </div>
+                </div>
+            </div>
+
+            <div class="gate" data-stage="3">
+                <div class="layui-card-body" style="color:#FF5722;margin-bottom:10px;">
+                    了断无格可填：系统把这片小班在册的现行采伐建档卡摘下（压死），
+                    它占着的额度<b>原样退回</b>年度账。一了断各栏封死，卡不抽、记事不改。
+                </div>
+            </div>
+
+            <div class="layui-form-item" id="submit-row">
+                <label class="layui-form-label">本笔附言</label>
+                <div class="layui-input-inline" style="width:300px;">
+                    <input type="text" name="remark" class="layui-input">
+                </div>
+                <button class="pear-btn pear-btn-primary pear-btn-md" lay-submit lay-filter="close-pass"
+                        style="margin-left:12px;">
+                    <i class="layui-icon layui-icon-ok"></i> 过这一道口
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<th:block th:include="include :: footer"/>
+<script th:inline="javascript">
+    let CARD_ID = /*[[${cardId}]]*/ null;
+    layui.use(['form', 'jquery', 'layer'], function () {
+        let form = layui.form, $ = layui.jquery, layer = layui.layer;
+        let P = rootPath + '/FlogCloseCardController/';
+        let NAMES = ['报伐', '核株', '验更', '了断'];
+        let STAT = {1: '在办', 2: '止步', 3: '已了断'};
+        let stage = null, status = null;
+
+        function render() {
+            let html = '';
+            for (let i = 0; i < 4; i++) {
+                let cls = i < stage ? 'color:#5FB878' : (i === stage ? 'color:#1E9FFF;font-weight:bold' : 'color:#ccc');
+                html += '<span style="' + cls + '">' + (i < stage ? '✓ ' : '') + (i + 1) + '·' + NAMES[i] + '</span>';
+                if (i < 3) html += '<span style="color:#bbb;margin:0 14px;">—</span>';
+            }
+            $('#stage-bar').html(html);
+            $('#stage-input').val(stage);
+            $('.gate').hide().find('input,textarea').prop('disabled', true);
+            if (status === 1) {
+                let $g = $('.gate[data-stage="' + stage + '"]');
+                $g.show().find('input,textarea').prop('disabled', false);
+                $('#submit-row').show();
+                $('#card-tip').text('眼下停在「' + NAMES[stage] + '」，只过这一道口；跳段、倒走都不算过成');
+            } else {
+                $('#submit-row').hide();
+                let why = status === 3
+                    ? '卡已了断，各栏封死：要动只能重新起一张卡'
+                    : '卡已止步，过后谁也续不进去：这片小班要办，另起一张卡';
+                $('#card-tip').html('<b style="color:#FF5722">' + why + '</b>');
+            }
+        }
+
+        $.getJSON(P + 'detail/' + CARD_ID, function (r) {
+            if (r.code !== 200 || !r.data) { layer.msg(r.msg || '卡翻不出来', {icon: 2}); return; }
+            let d = r.data;
+            stage = d.stage;
+            status = d.status;
+            render();
+        });
+
+        form.on('submit(close-pass)', function (data) {
+            let f = data.field;
+            let payload = {
+                id: parseInt(f.id, 10),
+                stage: parseInt(f.stage, 10),
+                remark: f.remark || null
+            };
+            if (stage === 0) {
+                payload.designNo = f.designNo;
+                payload.actualTrees = parseInt(f.actualTrees, 10);
+                payload.actualVolume = f.actualVolume;
+            } else if (stage === 1) {
+                payload.diffReason = f.diffReason || null;
+            } else if (stage === 2) {
+                payload.renewArea = f.renewArea;
+                payload.renewSurvival = f.renewSurvival;
+            }
+            let loading = layer.load();
+            $.ajax({
+                url: P + 'advanceJson', type: 'post', contentType: 'application/json',
+                data: JSON.stringify(payload), dataType: 'json',
+                success: function (r) {
+                    layer.close(loading);
+                    if (r.code !== 200) { layer.msg(r.msg, {icon: 2, time: 3200}); return; }
+                    let d = r.data || {};
+                    layer.msg(d.message || '过口成功', {icon: 1, time: 2200}, function () {
+                        if (d.status === 3) {
+                            parent.layer.close(parent.layer.getFrameIndex(window.name));
+                            parent.layui.table.reload('close-table');
+                        } else {
+                            parent.layui.table.reload('close-table');
+                            location.reload();
+                        }
+                    });
+                },
+                error: function (xhr) {
+                    layer.close(loading);
+                    let msg = '请求失败';
+                    try { msg = JSON.parse(xhr.responseText).msg; } catch (e) {}
+                    layer.msg(msg, {icon: 2, time: 3200});
+                }
+            });
+            return false;
+        });
+    });
+</script>
+</body>
+</html>
