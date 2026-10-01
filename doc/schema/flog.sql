@@ -40,21 +40,80 @@ CREATE TABLE IF NOT EXISTS t_flog_apply_card (
   KEY idx_card_bill (bill_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='伐区采伐申请建档卡';
 
+-- 伐区勾销事务卡：一小班一张活卡，四段（报伐/核株/验更/了断）挨着走。
+-- 卡头只放身份与落定；停在哪段、过没过成，系统照 t_flog_close_stage 履历自己算，
+-- 卡上的 stage/status 这两格只作摆示，谁手填都不作数。了断即摘册、占额原样退回；
+-- 止步(3)封死、了断(2)封死，卡永不物理删除（年底要查得出这片小班那年怎么收的）。
 CREATE TABLE IF NOT EXISTS t_flog_close_card (
   id bigint NOT NULL COMMENT '主键',
   biz_no varchar(64) DEFAULT NULL COMMENT '伐区勾销事务卡号',
-  stage int DEFAULT NULL COMMENT '当前段次 0..3（报伐/核株/验更/了断）',
-  status int DEFAULT NULL COMMENT '卡的落定 0未起 1在办 2已了断',
-  content varchar(255) DEFAULT NULL COMMENT '勾销记事',
-  last_action varchar(64) DEFAULT NULL COMMENT '最近一次过口动作',
-  del_flag int DEFAULT '0' COMMENT '删除标记 0正常 1删除',
+  site_no varchar(64) DEFAULT NULL COMMENT '编制单位底档字号',
+  subcomp_no varchar(64) DEFAULT NULL COMMENT '小班号（一张卡一片小班）',
+  cut_block_no varchar(64) DEFAULT NULL COMMENT '伐区名号',
+  design_no varchar(64) DEFAULT NULL COMMENT '报伐所认调查设计单号（钉过号的那张）',
+  design_trees int DEFAULT NULL COMMENT '设计株数（核株拿实采跟它对着看）',
+  design_volume decimal(14,4) DEFAULT NULL COMMENT '设计蓄积(立方米)',
+  cut_area decimal(12,2) DEFAULT NULL COMMENT '采伐面积(公顷，验更拿更新面积跟它比)',
+  actual_trees int DEFAULT NULL COMMENT '实采株数（报伐口报上来）',
+  actual_volume decimal(14,4) DEFAULT NULL COMMENT '实采蓄积(立方米，报伐口报上来)',
+  diff_tolerance decimal(8,4) DEFAULT NULL COMMENT '本站定的核株差格(立方米)，越过就得给一句说法',
+  diff_reason varchar(500) DEFAULT NULL COMMENT '核株差额越过差格时的一句说法',
+  renew_area decimal(12,2) DEFAULT NULL COMMENT '更新造林面积(公顷，不得小于采伐面积)',
+  survive_rate decimal(6,2) DEFAULT NULL COMMENT '更新成活率(%)',
+  occupy_qty decimal(14,2) DEFAULT NULL COMMENT '本卡占着的额度(立方米)，了断原样退回',
+  quota_year int DEFAULT NULL COMMENT '占额归属年度（退就退回这一年账）',
+  apply_card_id bigint DEFAULT NULL COMMENT '占额来源建档卡id（了断把它从在册处摘下、走它的压死退额）',
+  live_key varchar(128) DEFAULT NULL COMMENT '活卡对锁：在办时=字号@小班，了断/止步置空；唯一索引兜底一小班一活卡（空值不冲突）',
+  stage int DEFAULT NULL COMMENT '摆示用段次（系统算：过成几段就在几段，不作权威）',
+  status int DEFAULT NULL COMMENT '卡的落定 1在办 2已了断 3止步（止步封死，谁也续不进）',
+  content varchar(255) DEFAULT NULL COMMENT '勾销记事（最近一笔过口名目，只作摆示）',
+  last_action varchar(64) DEFAULT NULL COMMENT '最近一次过口动作（只作摆示）',
+  del_flag int DEFAULT '0' COMMENT '删除标记 0正常 1删除（只许逻辑摘册，永不物理删卡）',
+  create_by varchar(64) DEFAULT NULL COMMENT '立卡人',
+  create_time datetime DEFAULT NULL COMMENT '立卡时刻',
+  update_by varchar(64) DEFAULT NULL COMMENT '更新者',
+  update_time datetime DEFAULT NULL COMMENT '更新时间',
+  remark varchar(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_close_biz_no (biz_no),
+  UNIQUE KEY uk_close_live_key (live_key),
+  KEY idx_close_site_sub (site_no, subcomp_no),
+  KEY idx_close_live (status, del_flag)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='伐区勾销事务卡';
+
+-- 勾销履历：过一段、退一段、止一步都只许往这张表里续行，从不改旧行、不删行。
+-- 同一段过第二遍库里只认头一遍（active_flag=1 只留头一道）；服务口先对卡行 FOR UPDATE
+-- 上锁，锁内查 active 道数，并发两笔也只有一笔落得进新道。退回重做时先前那段的行
+-- 尽数沉底（active_flag=0），与后补的不摆在一处。当前停在哪段，数 active=1 的过成行算出来。
+CREATE TABLE IF NOT EXISTS t_flog_close_stage (
+  id bigint NOT NULL COMMENT '主键',
+  card_id bigint NOT NULL COMMENT '勾销事务卡id',
+  biz_no varchar(64) DEFAULT NULL COMMENT '勾销事务卡号（冗作回查）',
+  stage int NOT NULL COMMENT '段次 0报伐 1核株 2验更 3了断',
+  attempt_no int NOT NULL DEFAULT 1 COMMENT '本段第几轮（退回重做一轮，旧轮沉底、新轮另起）',
+  action varchar(32) NOT NULL COMMENT '过口动作 PASS过成 FAIL止步 RETREAT退回',
+  active_flag int NOT NULL DEFAULT 1 COMMENT '算不算数 1当前这道 0已沉底（退回/止步后旧道作废）',
+  design_no varchar(64) DEFAULT NULL COMMENT '本报伐钉的设计单号',
+  actual_trees int DEFAULT NULL COMMENT '本报伐实采株数',
+  actual_volume decimal(14,4) DEFAULT NULL COMMENT '本报伐实采蓄积',
+  design_trees int DEFAULT NULL COMMENT '设计株数快照',
+  design_volume decimal(14,4) DEFAULT NULL COMMENT '设计蓄积快照',
+  diff_value decimal(14,4) DEFAULT NULL COMMENT '实采与设计差额快照',
+  renew_area decimal(12,2) DEFAULT NULL COMMENT '本验更更新面积',
+  survive_rate decimal(6,2) DEFAULT NULL COMMENT '本验更成活率',
+  refund_qty decimal(14,2) DEFAULT NULL COMMENT '了断退回额度(立方米)',
+  note varchar(500) DEFAULT NULL COMMENT '本段一句话记事（说法/止步缘故，落头一遍，不许追第二句）',
+  op_by varchar(64) DEFAULT NULL COMMENT '过口经办人',
+  op_time datetime NOT NULL COMMENT '过口时刻',
+  del_flag int NOT NULL DEFAULT 0 COMMENT '删除标记（履历行永不删，此格恒0）',
   create_by varchar(64) DEFAULT NULL COMMENT '创建者',
   create_time datetime DEFAULT NULL COMMENT '创建时间',
   update_by varchar(64) DEFAULT NULL COMMENT '更新者',
   update_time datetime DEFAULT NULL COMMENT '更新时间',
-  remark varchar(500) DEFAULT NULL COMMENT '备注',
-  PRIMARY KEY (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='伐区勾销事务卡';
+  PRIMARY KEY (id),
+  KEY idx_stage_card_active (card_id, active_flag, stage),
+  KEY idx_stage_biz (biz_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='伐区勾销履历（只追加，不改不删）';
 
 CREATE TABLE IF NOT EXISTS t_flog_declare_row (
   id bigint NOT NULL COMMENT '主键',
@@ -451,7 +510,15 @@ VALUES
   (910000000000000015, '伐区调查设计', '检尺三级链一处算清并钉档', '/FlogSurveyDesignController/view', 0, 0,
    'flog:flogSurveyDesign:view', 1, 'fa fa-file-text', 95, 0, 'seed', NOW()),
   (910000000000000016, '调查设计提交复验', '提交钉档/整改复验重算追加', '/FlogSurveyDesignController/submit', 0, 910000000000000015,
-   'flog:flogSurveyDesign:add', 2, '', 1, 0, 'seed', NOW());
+   'flog:flogSurveyDesign:add', 2, '', 1, 0, 'seed', NOW()),
+  (910000000000000017, '伐区勾销事务卡', '一小班一卡，四段挨着走（报伐/核株/验更/了断）', '/flogCloseCard/view', 0, 0,
+   'flog:flogCloseCard:view', 1, 'fa fa-flag-checkered', 96, 0, 'seed', NOW()),
+  (910000000000000018, '勾销卡台账查询', '流转台账/勾销履历核验', '/flogCloseCard/list', 0, 910000000000000017,
+   'flog:flogCloseCard:view', 2, '', 1, 0, 'seed', NOW()),
+  (910000000000000019, '勾销卡开卡报伐', '开卡即报伐，没有现开空卡的口子', '/flogCloseCard/add', 0, 910000000000000017,
+   'flog:flogCloseCard:add', 2, '', 2, 0, 'seed', NOW()),
+  (910000000000000020, '勾销卡推进退回止步', '往前一格/退回一格/止步封死', '/flogCloseCard/pass', 0, 910000000000000017,
+   'flog:flogCloseCard:edit', 2, '', 3, 0, 'seed', NOW());
 
 -- 两角色都有的：建档卡查看/立卡/核对压死/删除(1..5)、底档册查看(6)。
 INSERT IGNORE INTO t_sys_permission_role (id, role_id, permission_id, create_by, create_time)
@@ -474,6 +541,10 @@ CROSS JOIN (
   UNION ALL SELECT 14, 910000000000000014
   UNION ALL SELECT 15, 910000000000000015
   UNION ALL SELECT 16, 910000000000000016
+  UNION ALL SELECT 17, 910000000000000017
+  UNION ALL SELECT 18, 910000000000000018
+  UNION ALL SELECT 19, 910000000000000019
+  UNION ALL SELECT 20, 910000000000000020
 ) p;
 
 -- 仅上级账号（管理员）：底档立户收回(7)、额度下达查看(8)、额度批数(9)。

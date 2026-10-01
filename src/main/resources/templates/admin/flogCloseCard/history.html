@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <th:block th:include="include :: header('伐区勾销履历')"/>
+</head>
+<body class="pear-container">
+<div class="layui-card">
+    <div class="layui-card-header">
+        <span th:text="${card != null ? card.bizNo : ''}"></span>
+        <span class="layui-badge layui-bg-blue" style="margin-left:8px"
+              th:text="${card != null ? card.siteNo + ' ' + card.subcompNo : ''}"></span>
+        <button class="pear-btn pear-btn-primary pear-btn-sm" style="float:right" id="verify-btn">
+            <i class="layui-icon layui-icon-auz"></i> 从了断往回核验
+        </button>
+    </div>
+    <div class="layui-card-body">
+        <table class="layui-table" lay-skin="line">
+            <thead>
+            <tr>
+                <th style="width:60px">段次</th>
+                <th style="width:110px">动作</th>
+                <th style="width:60px">轮次</th>
+                <th style="width:90px">算不算数</th>
+                <th>快照/记事</th>
+                <th style="width:100px">经办人</th>
+                <th style="width:165px">过口时刻</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="h : ${stages}">
+                <td>
+                    <span th:if="${h.stage == 0}">报伐</span>
+                    <span th:if="${h.stage == 1}">核株</span>
+                    <span th:if="${h.stage == 2}">验更</span>
+                    <span th:if="${h.stage == 3}">了断</span>
+                </td>
+                <td>
+                    <span th:if="${h.action == 'PASS'}" class="layui-badge layui-bg-green">过成</span>
+                    <span th:if="${h.action == 'FAIL'}" class="layui-badge layui-bg-orange">止步</span>
+                    <span th:if="${h.action == 'RETREAT'}" class="layui-badge">退回·不作数</span>
+                </td>
+                <td th:text="${h.attemptNo}"></td>
+                <td>
+                    <span th:if="${h.activeFlag == 1}" class="layui-badge layui-bg-green">当前这道</span>
+                    <span th:if="${h.activeFlag == 0}" class="layui-badge">已沉底</span>
+                </td>
+                <td>
+                    <div th:if="${h.stage == 0}">
+                        设计单 <b th:text="${h.designNo}"></b>；实采
+                        <b th:text="${h.actualTrees}"></b> 株、
+                        <b th:text="${h.actualVolume}"></b> m³；
+                        设计 <span th:text="${h.designTrees}"></span> 株 /
+                        <span th:text="${h.designVolume}"></span> m³
+                        <div class="layui-text" th:if="${h.note != null}" th:text="${h.note}"></div>
+                    </div>
+                    <div th:if="${h.stage == 1}">
+                        实采 <b th:text="${h.actualVolume}"></b> 对设计
+                        <b th:text="${h.designVolume}"></b>，差
+                        <b th:text="${h.diffValue}"></b> m³
+                        <div class="layui-text" th:if="${h.note != null}" th:text="${h.note}"></div>
+                    </div>
+                    <div th:if="${h.stage == 2}">
+                        更新 <b th:text="${h.renewArea}"></b> ha；成活
+                        <b th:text="${h.surviveRate}"></b> %
+                        <div class="layui-text" th:if="${h.note != null}" th:text="${h.note}"></div>
+                    </div>
+                    <div th:if="${h.stage == 3}">
+                        了断退额 <b th:text="${h.refundQty}"></b> m³
+                        <div class="layui-text" th:if="${h.note != null}" th:text="${h.note}"></div>
+                    </div>
+                </td>
+                <td th:text="${h.opBy}"></td>
+                <td th:text="${#dates.format(h.opTime, 'yyyy-MM-dd HH:mm:ss')}"></td>
+            </tr>
+            <tr th:if="${#lists.isEmpty(stages)}">
+                <td colspan="7" style="text-align:center;color:#999">履历里一笔都没有</td>
+            </tr>
+            </tbody>
+        </table>
+        <div class="layui-word-aux">
+            勾销履历只许续行、不许改旧行删旧行；沉底行是退回重做前的旧道，与后补的不摆在一处。
+        </div>
+    </div>
+</div>
+<th:block th:include="include :: footer"/>
+<script th:inline="javascript">
+    // 雪花长 id 内联成数字会丢精度，渲染为字符串字面量
+    let cardId = /*[[${card != null ? card.id.toString() : null}]]*/ null;
+    layui.use(['jquery'], function () {
+        let $ = layui.jquery;
+        $('#verify-btn').on('click', function () {
+            let loading = layer.load();
+            $.ajax({
+                url: rootPath + '/flogCloseCard/verify/' + cardId, type: 'post',
+                success: function (r) {
+                    layer.close(loading);
+                    if (r.code === 200) {
+                        layer.msg('履历核验通过：从了断往回数，每一笔都合得上号', {icon: 1});
+                    } else {
+                        layer.msg(r.msg || '这张卡没走成', {icon: 2});
+                    }
+                },
+                error: function () { layer.close(loading); layer.msg('请求失败', {icon: 2}); }
+            });
+        });
+    });
+</script>
+</body>
+</html>

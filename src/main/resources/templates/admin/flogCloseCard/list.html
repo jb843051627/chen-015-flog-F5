@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.pollix.at/thymeleaf/shiro">
+<head>
+    <th:block th:include="include :: header('伐区勾销事务卡')"/>
+</head>
+<body class="pear-container">
+<div class="layui-card">
+    <div class="layui-card-body">
+        <form class="layui-form" action="">
+            <div class="layui-form-item">
+                <label class="layui-form-label">勾销卡号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="bizNo" placeholder="卡号" class="layui-input">
+                </div>
+                <label class="layui-form-label">底档字号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="siteNo" placeholder="以字号核" class="layui-input">
+                </div>
+                <label class="layui-form-label">小班号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="subcompNo" class="layui-input">
+                </div>
+                <label class="layui-form-label">落定</label>
+                <div class="layui-input-inline">
+                    <select name="status">
+                        <option value="">全部</option>
+                        <option value="1">在办</option>
+                        <option value="2">已了断</option>
+                        <option value="3">止步</option>
+                    </select>
+                </div>
+                <button class="pear-btn pear-btn-md pear-btn-primary" lay-submit lay-filter="close-query">
+                    <i class="layui-icon layui-icon-search"></i> 查询
+                </button>
+                <button type="reset" class="pear-btn pear-btn-md">
+                    <i class="layui-icon layui-icon-refresh"></i> 重置
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="layui-card">
+    <div class="layui-card-body">
+        <table id="close-table" lay-filter="close-table"></table>
+    </div>
+</div>
+</body>
+
+<script type="text/html" id="close-toolbar">
+    <button shiro:hasPermission="flog:flogCloseCard:add" class="pear-btn pear-btn-primary pear-btn-md" lay-event="add">
+        <i class="layui-icon layui-icon-add-1"></i> 开卡·报伐
+    </button>
+</script>
+
+<script type="text/html" id="close-bar">
+    <button shiro:hasPermission="flog:flogCloseCard:edit" class="pear-btn pear-btn-primary pear-btn-sm" lay-event="pass" title="推进当前段一道关口">
+        <i class="layui-icon layui-icon-right"></i>
+    </button>
+    <button shiro:hasPermission="flog:flogCloseCard:edit" class="pear-btn pear-btn-normal pear-btn-sm" lay-event="back" title="退回上一段重做（旧名目沉底）">
+        <i class="layui-icon layui-icon-left"></i>
+    </button>
+    <button shiro:hasPermission="flog:flogCloseCard:edit" class="pear-btn pear-btn-danger pear-btn-sm" lay-event="halt" title="写下止步（封死，谁也续不进）">
+        <i class="layui-icon layui-icon-close"></i>
+    </button>
+    <button shiro:hasPermission="flog:flogCloseCard:view" class="pear-btn pear-btn-sm" lay-event="history" title="勾销履历">
+        <i class="layui-icon layui-icon-time"></i>
+    </button>
+</script>
+
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['table', 'form', 'jquery'], function () {
+        let table = layui.table;
+        let form = layui.form;
+        let $ = layui.jquery;
+        let MODULE_PATH = rootPath + "/flogCloseCard/";
+
+        // 段次是系统按履历算出来摆的：0报伐 1核株 2验更 3了断；已了断 stage=4 只表示四段走完
+        let STAGE = {0: '报伐', 1: '核株', 2: '验更', 3: '了断', 4: '了断（封死）'};
+        let STATUS = {1: '在办', 2: '已了断', 3: '止步'};
+
+        let cols = [[
+            {title: '勾销卡号', field: 'bizNo', align: 'center', width: 170},
+            {title: '底档字号', field: 'siteNo', align: 'center', width: 90},
+            {title: '小班号', field: 'subcompNo', align: 'center', width: 100},
+            {title: '伐区名号', field: 'cutBlockNo', align: 'center', width: 120},
+            {title: '设计单号', field: 'designNo', align: 'center', width: 150},
+            {title: '实采株数', field: 'actualTrees', align: 'center', width: 90},
+            {title: '实采蓄积(m³)', field: 'actualVolume', align: 'center', width: 100},
+            {title: '更新面积(ha)', field: 'renewArea', align: 'center', width: 100},
+            {title: '成活(%)', field: 'surviveRate', align: 'center', width: 80},
+            {title: '当前段(系统算)', field: 'stage', align: 'center', width: 120, templet: function (d) {
+                return STAGE[d.stage] || '';
+            }},
+            {title: '落定', field: 'status', align: 'center', width: 90, templet: function (d) {
+                return STATUS[d.status] || '';
+            }},
+            {title: '最近一笔名目', field: 'content', align: 'left', minWidth: 220},
+            {title: '立卡时刻', field: 'createTime', align: 'center', width: 165},
+            {title: '操作', toolbar: '#close-bar', align: 'center', width: 170, fixed: 'right'}
+        ]];
+
+        table.render({
+            elem: '#close-table',
+            url: MODULE_PATH + 'list',
+            page: true,
+            method: 'get',
+            cols: cols,
+            skin: 'line',
+            toolbar: '#close-toolbar',
+            defaultToolbar: ['refresh', 'filter', 'print', 'exports']
+        });
+
+        form.on('submit(close-query)', function (data) {
+            table.reload('close-table', {where: data.field, pageNum: 1});
+            return false;
+        });
+
+        table.on('tool(close-table)', function (obj) {
+            let d = obj.data;
+            if (obj.event === 'pass') {
+                openPass(d);
+            } else if (obj.event === 'back') {
+                layer.prompt({title: '退回上一段重做（可填一句缘故）', formType: 2}, function (reason, idx) {
+                    layer.close(idx);
+                    postJson(MODULE_PATH + 'back', {id: d.id, reason: reason}, '已退回');
+                });
+            } else if (obj.event === 'halt') {
+                layer.prompt({title: '写下止步缘故——这一段不过了，卡就此封死', formType: 2}, function (reason, idx) {
+                    layer.close(idx);
+                    if (!reason) { layer.msg('止步得有一句缘故', {icon: 2}); return; }
+                    $.ajax({
+                        url: MODULE_PATH + 'halt/' + d.id, type: 'post', data: {reason: reason},
+                        success: function (r) { done(r, '已止步'); }, error: netErr
+                    });
+                });
+            } else if (obj.event === 'history') {
+                window.open(MODULE_PATH + 'history/' + d.id, '_blank');
+            }
+        });
+
+        table.on('toolbar(close-table)', function (obj) {
+            if (obj.event === 'add') {
+                layer.open({
+                    type: 2, title: '开卡即报伐（没有先开空卡再涂一句的口子）', shade: 0.1,
+                    area: ['720px', '600px'], content: MODULE_PATH + 'add'
+                });
+            }
+        });
+
+        // 卡停在哪段就只摆那段该报的关口，别段的格子报了也不看
+        function openPass(d) {
+            let stage = d.stage;
+            if (d.status === 2) { layer.msg('已了断封死，要动只能另起新卡', {icon: 2}); return; }
+            if (d.status === 3) { layer.msg('已止步封死，谁也续不进；只能另起新卡', {icon: 2}); return; }
+            if (stage === 3) {
+                layer.confirm('了断：把这片小班从在册处摘下，占着的额度原样退回。确认？',
+                    {icon: 3, title: '了断'}, function (idx) {
+                        layer.close(idx);
+                        postJson(MODULE_PATH + 'pass', {id: d.id}, '已了断');
+                    });
+                return;
+            }
+            let fields = '';
+            if (stage === 1) {
+                fields =
+                    '<div class="layui-form" style="padding:16px">' +
+                    '<div class="layui-form-item"><label class="layui-form-label">实采株数</label><div class="layui-input-block">' +
+                    '<input id="p-trees" type="number" value="' + (d.actualTrees || '') + '" class="layui-input" placeholder="山里复核再报一遍——第二遍库里只认头一遍，留空即照旧数"></div></div>' +
+                    '<div class="layui-form-item"><label class="layui-form-label">实采蓄积(m³)</label><div class="layui-input-block">' +
+                    '<input id="p-vol" type="number" step="0.0001" value="' + (d.actualVolume || '') + '" class="layui-input" placeholder="差过站里差格就得给说法"></div></div>' +
+                    '<div class="layui-form-item"><label class="layui-form-label">一句说法</label><div class="layui-input-block">' +
+                    '<textarea id="p-reason" class="layui-textarea" placeholder="差额在差格内可不填；越过差格必填"></textarea></div></div></div>';
+            } else if (stage === 2) {
+                fields =
+                    '<div class="layui-form" style="padding:16px">' +
+                    '<div class="layui-form-item"><label class="layui-form-label">更新面积(ha)</label><div class="layui-input-block">' +
+                    '<input id="p-area" type="number" step="0.01" class="layui-input" placeholder="不得小于采伐面积 ' + (d.cutArea || 0) + ' 公顷"></div></div>' +
+                    '<div class="layui-form-item"><label class="layui-form-label">成活(%)</label><div class="layui-input-block">' +
+                    '<input id="p-rate" type="number" step="0.01" class="layui-input" placeholder="0 到 100 之间"></div></div></div>';
+            } else {
+                layer.msg('该卡还停在报伐段，库里没这个段次的关口（开卡即报伐）', {icon: 2});
+                return;
+            }
+            layer.open({
+                type: 1, title: '推进·' + ({1: '核株', 2: '验更'}[stage]) + '段', shade: 0.1, area: ['560px', '440px'],
+                content: fields,
+                btn: ['过这道关口', '取消'],
+                yes: function (idx) {
+                    let payload = {id: d.id};
+                    if (stage === 1) {
+                        let t = $('#p-trees').val(), v = $('#p-vol').val();
+                        if (t) payload.actualTrees = Number(t);
+                        if (v) payload.actualVolume = v;
+                        payload.diffReason = $('#p-reason').val();
+                    } else if (stage === 2) {
+                        payload.renewArea = $('#p-area').val();
+                        payload.surviveRate = $('#p-rate').val();
+                    }
+                    layer.close(idx);
+                    postJson(MODULE_PATH + 'pass', payload, '已推进');
+                }
+            });
+        }
+
+        function postJson(url, data, okMsg) {
+            let loading = layer.load();
+            $.ajax({
+                url: url, type: 'post', contentType: 'application/json',
+                data: JSON.stringify(data),
+                success: function (r) { layer.close(loading); done(r, okMsg); },
+                error: netErr
+            });
+        }
+
+        function done(r, okMsg) {
+            if (r.code === 200) {
+                layer.msg((r.data && r.data.message) ? r.data.message : (okMsg + '成功'),
+                    {icon: 1, time: 1600}, function () { table.reload('close-table'); });
+            } else {
+                layer.msg(r.msg || '没过成', {icon: 2});
+            }
+        }
+
+        function netErr() { layer.closeAll('loading'); layer.msg('请求失败', {icon: 2}); }
+    });
+</script>
+</body>
+</html>
